@@ -412,3 +412,121 @@ body:has(.editor) .site-footer {
   color: #16a34a;
   font-weight: 600;
 }
+
+/* ---- library ---------------------------------------------------------------------------------- */
+
+.progress.cleared {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.library-actions button,
+.library-actions .import {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.library-actions .import input {
+  display: none;
+}
+
+.library-actions .danger {
+  margin-left: auto;
+  color: #dc2626;
+}
+
+.library table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.library th,
+.library td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.library td.pins {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.library input[type="text"] {
+  font: inherit;
+  width: 100%;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--fg);
+}
+
+.library input[type="text"]:hover,
+.library input[type="text"]:focus {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.library h2 small {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.library .muted {
+  color: var(--muted);
+}
+
+.library .message,
+.toolbar .message {
+  color: var(--accent);
+}
+
+.register form {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.register input {
+  flex: 1;
+  font: inherit;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.register button {
+  font: inherit;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.4rem;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.toolbar .group-title {
+  font-size: 0.8rem;
+  color: var(--muted);
+  width: 100%;
+}

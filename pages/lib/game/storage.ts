@@ -58,9 +58,66 @@ export function register(save: SaveData, component: ComponentDef): SaveData {
   };
 }
 
-/** Whether another registered component places this one. */
+/** Names of the registered components and stage drafts that place this component. */
+export function usedBy(save: SaveData, id: string): string[] {
+  const uses = (d: Design | undefined) =>
+    d?.placements.some((p) => p.componentId === id) ?? false;
+  return [
+    ...save.components.filter((c) => uses(c.design)).map((c) => c.name),
+    ...Object.entries(save.drafts).filter(([, d]) => uses(d)).map(([stage]) =>
+      `${stage} の下書き`
+    ),
+  ];
+}
+
+/** Whether another registered component or a draft places this one. */
 export function isUsed(save: SaveData, id: string): boolean {
-  return save.components.some((c) =>
-    c.design?.placements.some((p) => p.componentId === id)
-  );
+  return usedBy(save, id).length > 0;
+}
+
+/** Removes a component and recomputes the stage's best area. Refused while something uses it. */
+export function removeComponent(
+  save: SaveData,
+  id: string,
+): SaveData | undefined {
+  const component = save.components.find((c) => c.id === id);
+  if (component === undefined || isUsed(save, id)) return undefined;
+  const components = save.components.filter((c) => c.id !== id);
+  const remaining = components.filter((c) => c.stageId === component.stageId);
+  const best = { ...save.best };
+  if (remaining.length === 0) delete best[component.stageId];
+  else {best[component.stageId] = Math.min(...remaining.map((c) =>
+      c.width * c.height
+    ));}
+  return { ...save, components, best };
+}
+
+export function renameComponent(
+  save: SaveData,
+  id: string,
+  name: string,
+): SaveData {
+  return {
+    ...save,
+    components: save.components.map((c) => c.id === id ? { ...c, name } : c),
+  };
+}
+
+/** A registered component made from a passing design. */
+export function componentFrom(
+  stageId: string,
+  name: string,
+  design: Design,
+  id: string = crypto.randomUUID(),
+): ComponentDef {
+  return {
+    id,
+    name,
+    stageId,
+    width: design.width,
+    height: design.height,
+    pins: design.pins,
+    design,
+    createdAt: new Date().toISOString(),
+  };
 }

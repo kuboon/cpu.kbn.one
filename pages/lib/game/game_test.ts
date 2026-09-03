@@ -9,7 +9,17 @@ import { findStage, STAGES } from "./stages/index.ts";
 import { truthTable } from "./stages/types.ts";
 import { par, REFERENCE_COMPONENTS, REFERENCES } from "./reference.ts";
 import { worldPins } from "./transform.ts";
-import { emptySave, isUsed, parse, register, serialize } from "./storage.ts";
+import {
+  componentFrom,
+  emptySave,
+  isUsed,
+  parse,
+  register,
+  removeComponent,
+  renameComponent,
+  serialize,
+  usedBy,
+} from "./storage.ts";
 
 const library = createLibrary(REFERENCE_COMPONENTS);
 
@@ -254,4 +264,35 @@ Deno.test("save data round-trips and tracks the best area", () => {
   });
   assertEquals(isUsed(save, "xor"), true);
   assertThrows(() => parse("{}"), Error);
+});
+
+Deno.test("components can be renamed and removed only while unused", () => {
+  let save = emptySave();
+  const xor = componentFrom("xor", "XOR", REFERENCES.xor, "xor");
+  const and = componentFrom("and", "AND", REFERENCES.and, "and");
+  save = register(register(save, xor), and);
+  save = register(
+    save,
+    componentFrom("xor", "XOR wide", { ...REFERENCES.xor, width: 5 }, "xor2"),
+  );
+  assertEquals(save.best, { xor: 12, and: 3 });
+
+  save = renameComponent(save, "xor", "XOR small");
+  assertEquals(save.components[0].name, "XOR small");
+
+  const ha = componentFrom("half-adder", "HA", REFERENCES["half-adder"], "ha");
+  save = register(save, ha);
+  assertEquals(usedBy(save, "xor"), ["HA"]);
+  assertEquals(removeComponent(save, "xor"), undefined);
+  save = { ...save, drafts: { nand: REFERENCES["half-adder"] } };
+  assertEquals(usedBy(save, "and"), ["HA", "nand の下書き"]);
+
+  save = removeComponent(save, "ha")!;
+  assertEquals(save.best["half-adder"], undefined);
+  assertEquals(usedBy(save, "xor"), ["nand の下書き"]);
+  save = { ...save, drafts: {} };
+  assertEquals(usedBy(save, "xor"), []);
+  save = removeComponent(save, "xor")!;
+  assertEquals(save.best.xor, 15);
+  assertEquals(removeComponent(save, "missing"), undefined);
 });

@@ -26,13 +26,13 @@ import { Simulator } from "../lib/game/sim.ts";
 import type { EvalResult } from "../lib/game/sim.ts";
 import { verify } from "../lib/game/verify.ts";
 import type { Step, StepResult } from "../lib/game/verify.ts";
-import { findStage } from "../lib/game/stages/index.ts";
+import { findStage, STAGES } from "../lib/game/stages/index.ts";
 import type { Stage } from "../lib/game/stages/index.ts";
 import { par } from "../lib/game/reference.ts";
 import * as edit from "../lib/game/edit.ts";
 import type { Point, Slot } from "../lib/game/edit.ts";
 import { loadSave, storeSave } from "../lib/game/browser-storage.ts";
-import { emptySave } from "../lib/game/storage.ts";
+import { componentFrom, emptySave, register } from "../lib/game/storage.ts";
 import type { SaveData } from "../lib/game/storage.ts";
 
 /** Pixels per cell in the SVG's own coordinates; the drawing scales to its container. */
@@ -85,6 +85,8 @@ export const Editor = island(
     let drag: Drag | undefined;
     let message: string | undefined;
     let missing: string | undefined;
+    /** Name of the component just registered, for the confirmation. */
+    let registered: string | undefined;
 
     // Simulation state, rebuilt after every edit.
     let problems: Problem[] = [];
@@ -109,6 +111,19 @@ export const Editor = island(
       storeSave(save);
     }
 
+    /** Registers the current board as a component of this stage. */
+    function registerComponent(name: string): void {
+      if (stage === undefined) return;
+      const trimmed = name.trim() ||
+        `${stage.title} ${design.width}×${design.height}`;
+      const component = componentFrom(stage.id, trimmed, design);
+      save = register(save, component);
+      library = createLibrary(save.components);
+      storeSave(save);
+      registered = trimmed;
+      handle.update();
+    }
+
     /** Applies an edit: `undefined` means it was refused, and `why` is shown instead. */
     function commit(next: Design | undefined, why?: string): void {
       if (next === undefined) {
@@ -117,6 +132,7 @@ export const Editor = island(
         history = [...history.slice(-99), design];
         design = next;
         message = undefined;
+        registered = undefined;
         rebuild();
         saveDraft();
       }
@@ -726,7 +742,39 @@ export const Editor = island(
             )
             : null}
           {allPassed
-            ? <p class="pass">すべて合格。面積 {area(design)}。</p>
+            ? (
+              <div class="register">
+                <p class="pass">すべて合格。面積 {area(design)}。</p>
+                {registered !== undefined
+                  ? (
+                    <p>
+                      「{registered}」を登録しました。パレットに追加されています。
+                    </p>
+                  )
+                  : (
+                    <form
+                      mix={[on("submit", (event) => {
+                        event.preventDefault();
+                        const form = event.currentTarget as HTMLFormElement;
+                        const input = form.elements.namedItem(
+                          "name",
+                        ) as HTMLInputElement;
+                        registerComponent(input.value);
+                      })]}
+                    >
+                      <input
+                        key={`name-${design.width}x${design.height}`}
+                        name="name"
+                        type="text"
+                        defaultValue={`${
+                          stage!.title
+                        } ${design.width}×${design.height}`}
+                      />
+                      <button type="submit">部品として登録</button>
+                    </form>
+                  )}
+              </div>
+            )
             : null}
           {tests.length > 0
             ? (
@@ -778,9 +826,12 @@ export const Editor = island(
         );
       }
       if (stage === undefined) return <p>読み込み中…</p>;
-      const registered = [...library.values()].filter((c) =>
-        c.primitive === undefined
-      );
+      const byStage = STAGES
+        .map((s) => ({
+          stage: s,
+          components: save.components.filter((c) => c.stageId === s.id),
+        }))
+        .filter((g) => g.components.length > 0);
       const target = par(stage.id);
       return (
         <div class="editor">
@@ -810,9 +861,12 @@ export const Editor = island(
                 <div class="group">
                   {PRIMITIVES.map(paletteEntry)}
                 </div>
-                {registered.length > 0
-                  ? <div class="group">{registered.map(paletteEntry)}</div>
-                  : null}
+                {byStage.map((g) => (
+                  <div class="group" key={g.stage.id}>
+                    <span class="group-title">{g.stage.title}</span>
+                    {g.components.map(paletteEntry)}
+                  </div>
+                ))}
                 <div class="group">
                   <button
                     type="button"
