@@ -1,17 +1,12 @@
 /**
- * `.md` pages: a Markdown article with YAML front-matter.
- *
- * The framework never sees Markdown — this transform and its dependencies are the site's, which is
- * what keeps `@kuboon/md` out of the generator. Articles are text, so they place no islands and
- * ship no JavaScript.
+ * `.md` pages: a Markdown document with YAML front-matter, rendered into the shell.
  */
 
 import type { FileTransform } from "@kuboon/remix-ssg/site";
 
-import { parseArticle } from "../lib/articles.ts";
+import { parseDocument } from "../lib/document.ts";
 import { renderMarkdown } from "../lib/markdown.ts";
-import { Link } from "../lib/link.tsx";
-import { renderPage } from "../layout.tsx";
+import { renderPage, SITE_NAME } from "../layout.tsx";
 
 export function markdown(context: { base: string }): FileTransform {
   return {
@@ -27,25 +22,20 @@ export function markdown(context: { base: string }): FileTransform {
 
     async render(file) {
       const slug = file.path.replace(/\.md$/, "").split("/").pop() ?? file.path;
-      const article = parseArticle(slug, await Deno.readTextFile(file.url));
-      const body = await renderMarkdown(article.body);
+      const doc = parseDocument(slug, await Deno.readTextFile(file.url));
+      const body = await renderMarkdown(doc.body);
 
       return {
         body: await renderPage({
-          title: `${article.title} — remix-ssg`,
-          description: article.summary,
+          title: `${doc.title} — ${SITE_NAME}`,
+          description: doc.summary,
           base: context.base,
           islandUrls: {},
           children: (
             <article class="post">
-              <h1>{article.title}</h1>
-              {article.date
-                ? <time datetime={article.date}>{article.date}</time>
-                : null}
+              <h1>{doc.title}</h1>
+              {doc.date ? <time datetime={doc.date}>{doc.date}</time> : null}
               {body}
-              <p>
-                <Link href={`${context.base}/blog`}>← All posts</Link>
-              </p>
             </article>
           ),
         }),

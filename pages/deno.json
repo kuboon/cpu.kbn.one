@@ -2,70 +2,91 @@
   "tasks": {
     "dev": "deno serve -P=dev --watch --port 8000 router.ts",
     "build": "deno run -c deno.json -P=build jsr:@kuboon/remix-ssg/build.ts",
-    "check": "deno check router.ts layout.tsx islands lib pages transforms && deno lint && deno fmt --check"
+    "check": "deno check router.ts layout.tsx islands lib pages transforms && deno lint && deno fmt --check",
+    "test": "deno test lib"
   },
   "nodeModulesDir": "auto",
-  "unstable": ["bundle"],
+  "unstable": [
+    "bundle"
+  ],
   "permissions": {
     "build": {
-      "read": ["."],
-      "write": ["dist"],
+      "read": [
+        "."
+      ],
+      "write": [
+        "dist"
+      ],
       "env": {
-        "allow": ["BASE_URL"],
-        "ignore": ["NODE_ENV", "VSCODE_TEXTMATE_DEBUG"]
+        "allow": [
+          "BASE_URL"
+        ],
+        "ignore": [
+          "NODE_ENV",
+          "VSCODE_TEXTMATE_DEBUG"
+        ]
       },
       "import": true
     },
     "dev": {
-      "read": ["."],
+      "read": [
+        "."
+      ],
       "env": {
-        "allow": ["BASE_URL", "PORT"],
-        "ignore": ["NODE_ENV", "VSCODE_TEXTMATE_DEBUG"]
+        "allow": [
+          "BASE_URL",
+          "PORT"
+        ],
+        "ignore": [
+          "NODE_ENV",
+          "VSCODE_TEXTMATE_DEBUG"
+        ]
       },
-      "net": ["0.0.0.0", "127.0.0.1", "localhost"],
+      "net": [
+        "0.0.0.0",
+        "127.0.0.1",
+        "localhost"
+      ],
       "import": true
     }
   },
   "minimumDependencyAge": {
     "age": "P1D",
-    "exclude": ["jsr:@kuboon/*"]
+    "exclude": [
+      "jsr:@kuboon/*"
+    ]
   },
   "compilerOptions": {
-    "lib": ["deno.ns", "dom", "dom.iterable", "esnext"],
+    "lib": [
+      "deno.ns",
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "jsx": "react-jsx",
     "jsxImportSource": "@remix-run/ui"
   },
   "imports": {
     "@remix-run/ui": "npm:@remix-run/ui@^0.8.0",
     "@remix-run/ui/server": "npm:@remix-run/ui@^0.8.0/server",
-    "@remix-run/ui/accordion": "npm:@remix-run/ui@^0.8.0/accordion",
-    "@remix-run/ui/anchor": "npm:@remix-run/ui@^0.8.0/anchor",
-    "@remix-run/ui/animation": "npm:@remix-run/ui@^0.8.0/animation",
-    "@remix-run/ui/breadcrumbs": "npm:@remix-run/ui@^0.8.0/breadcrumbs",
-    "@remix-run/ui/button": "npm:@remix-run/ui@^0.8.0/button",
-    "@remix-run/ui/checkbox": "npm:@remix-run/ui@^0.8.0/checkbox",
-    "@remix-run/ui/combobox": "npm:@remix-run/ui@^0.8.0/combobox",
-    "@remix-run/ui/combobox/primitives": "npm:@remix-run/ui@^0.8.0/combobox/primitives",
-    "@remix-run/ui/input": "npm:@remix-run/ui@^0.8.0/input",
-    "@remix-run/ui/listbox": "npm:@remix-run/ui@^0.8.0/listbox",
-    "@remix-run/ui/menu": "npm:@remix-run/ui@^0.8.0/menu",
-    "@remix-run/ui/menu/primitives": "npm:@remix-run/ui@^0.8.0/menu/primitives",
-    "@remix-run/ui/popover": "npm:@remix-run/ui@^0.8.0/popover",
-    "@remix-run/ui/radio": "npm:@remix-run/ui@^0.8.0/radio",
-    "@remix-run/ui/select": "npm:@remix-run/ui@^0.8.0/select",
-    "@remix-run/ui/select/primitives": "npm:@remix-run/ui@^0.8.0/select/primitives",
-    "@remix-run/ui/tabs": "npm:@remix-run/ui@^0.8.0/tabs",
-    "@remix-run/ui/toggle": "npm:@remix-run/ui@^0.8.0/toggle",
     "@kuboon/remix-ssg": "jsr:@kuboon/remix-ssg@^0.7.0",
     "@kuboon/md": "jsr:@kuboon/md@^0.3.0",
     "@kuboon/md/hast_to_remix.ts": "jsr:@kuboon/md@^0.3.0/hast_to_remix.ts",
     "@std/front-matter": "jsr:@std/front-matter@^1.0.9",
-    "@std/path": "jsr:@std/path@^1.1.6"
+    "@std/path": "jsr:@std/path@^1.1.6",
+    "@std/assert": "jsr:@std/assert@^1.0.13"
   },
   "fmt": {
-    "exclude": ["dist", "node_modules"]
+    "exclude": [
+      "dist",
+      "node_modules"
+    ],
+    "proseWrap": "preserve"
   },
   "lint": {
-    "exclude": ["dist", "node_modules"]
+    "exclude": [
+      "dist",
+      "node_modules"
+    ]
   }
 }

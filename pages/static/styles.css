@@ -86,14 +86,6 @@ a {
   color: var(--muted);
 }
 
-.features {
-  padding-left: 1.1rem;
-}
-
-.features li {
-  margin-block: 0.4rem;
-}
-
 .button {
   display: inline-block;
   margin-top: 0.5rem;
@@ -105,33 +97,6 @@ a {
   font-weight: 600;
 }
 
-.post-list {
-  list-style: none;
-  padding: 0;
-}
-
-.post-list li {
-  padding-block: 1rem;
-  border-bottom: 1px solid var(--border);
-}
-
-.post-list a {
-  font-size: 1.2rem;
-  font-weight: 600;
-}
-
-.post-list time,
-.post time {
-  display: block;
-  color: var(--muted);
-  font-size: 0.85rem;
-  margin-block: 0.2rem;
-}
-
-.post-list p {
-  margin-block: 0.3rem 0;
-}
-
 code {
   background: var(--card);
   padding: 0.1rem 0.35rem;
@@ -139,43 +104,37 @@ code {
   font-size: 0.9em;
 }
 
-.demo {
-  margin-block: 2rem;
-  padding: 1.25rem;
-  border: 1px solid var(--border);
-  border-radius: 0.75rem;
+.stages {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.stages th,
+.stages td {
+  padding: 0.5rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.stages small {
+  color: var(--muted);
+}
+
+.post pre {
+  overflow-x: auto;
+  padding: 0.75rem 1rem;
   background: var(--card);
-}
-
-.demo h2 {
-  margin-top: 0;
-}
-
-.counter {
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 0.55rem 1rem;
-  border: 1px solid var(--accent);
   border-radius: 0.5rem;
-  background: var(--accent);
-  color: #fff;
 }
 
-.counter:active {
-  transform: translateY(1px);
+.post table {
+  border-collapse: collapse;
 }
 
-.demo-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.75rem;
-}
-
-.total {
-  font: inherit;
-  padding: 0.55rem 1rem;
-  border: 1px dashed var(--accent);
-  border-radius: 0.5rem;
+.post th,
+.post td {
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
 }
