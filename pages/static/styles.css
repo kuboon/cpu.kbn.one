@@ -606,6 +606,10 @@ body:has(.editor) .site-footer {
   width: 100%;
 }
 
+.toolbar .group-title.sub {
+  font-size: 0.75rem;
+}
+
 .tests h3 {
   display: flex;
   align-items: center;

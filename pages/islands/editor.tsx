@@ -900,7 +900,7 @@ export const Editor = island(
       );
     }
 
-    function paletteEntry(def: ComponentDef): RemixNode {
+    function partButton(def: ComponentDef): RemixNode {
       return toolButton(
         { kind: "place", componentId: def.id },
         def.primitive && def.primitive !== "split"
@@ -1012,7 +1012,7 @@ export const Editor = island(
                 {registered !== undefined
                   ? (
                     <p>
-                      「{registered}」を登録しました。パレットに追加されています。
+                      「{registered}」をライブラリに登録しました。左の部品一覧から置けます。
                     </p>
                   )
                   : (
@@ -1126,12 +1126,16 @@ export const Editor = island(
                   {toolButton({ kind: "erase" }, "消去 (e)")}
                 </div>
                 <div class="group">
-                  {PRIMITIVES.map(paletteEntry)}
+                  <span class="group-title">素子</span>
+                  {PRIMITIVES.map(partButton)}
                 </div>
+                {byStage.length > 0
+                  ? <span class="group-title">ライブラリ</span>
+                  : null}
                 {byStage.map((g) => (
                   <div class="group" key={g.stage.id}>
-                    <span class="group-title">{g.stage.title}</span>
-                    {g.components.map(paletteEntry)}
+                    <span class="group-title sub">{g.stage.title}</span>
+                    {g.components.map(partButton)}
                   </div>
                 ))}
                 <div class="group">
