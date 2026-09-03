@@ -134,6 +134,7 @@ export const Editor = island(
         design = next;
         message = undefined;
         registered = undefined;
+        shown = undefined;
         rebuild();
         saveDraft();
       }
@@ -152,13 +153,42 @@ export const Editor = island(
 
     function setInputs(next: Record<string, Bit>): void {
       inputs = next;
+      shown = undefined;
       live = sim?.evaluate(inputs);
       handle.update();
     }
 
+    let playing: number | undefined;
+
+    /** Steps through the tests on the live simulator, one every 600 ms. */
+    function play(): void {
+      if (playing !== undefined) {
+        clearTimeout(playing);
+        playing = undefined;
+        handle.update();
+        return;
+      }
+      let index = 0;
+      const tick = () => {
+        if (stage === undefined || index >= stage.steps.length) {
+          playing = undefined;
+          handle.update();
+          return;
+        }
+        showStep(index);
+        index++;
+        playing = setTimeout(tick, 600);
+      };
+      tick();
+    }
+
     /** Replays the test steps up to `index` on the live simulator, so a latch shows its real state. */
+    /** The test step the live simulator currently shows, if any. */
+    let shown: number | undefined;
+
     function showStep(index: number): void {
       if (stage === undefined || sim === undefined) return;
+      shown = index;
       sim.reset();
       inputs = {};
       for (let i = 0; i <= index; i++) {
@@ -769,6 +799,13 @@ export const Editor = island(
         <section class="tests">
           <h3>
             テスト {problems.length === 0 ? `${passed} / ${tests.length}` : ""}
+            {tests.length > 0
+              ? (
+                <button type="button" class="play" mix={[on("click", play)]}>
+                  {playing === undefined ? "▶ 再生" : "■ 停止"}
+                </button>
+              )
+              : null}
           </h3>
           {problems.length > 0
             ? (
@@ -836,7 +873,9 @@ export const Editor = island(
                   {tests.map((r, i) => (
                     <tr
                       key={i}
-                      class={r.ok ? "ok" : "ng"}
+                      class={`${r.ok ? "ok" : "ng"}${
+                        shown === i ? " shown" : ""
+                      }`}
                       mix={[on("click", () => showStep(i))]}
                     >
                       <td>{r.ok ? "✓" : "✗"}</td>

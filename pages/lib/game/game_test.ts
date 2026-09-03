@@ -54,6 +54,10 @@ Deno.test("reference areas are the pars", () => {
       switch: undefined,
       "half-adder": 30,
       "full-adder": undefined,
+      "sr-latch": 12,
+      "d-latch": 12,
+      dff: 60,
+      "register-bit": undefined,
     },
   );
 });

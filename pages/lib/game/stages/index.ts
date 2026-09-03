@@ -1,11 +1,11 @@
 /**
- * The stages, in play order. Single-bit stages only for now; the multi-bit, memory and CPU
- * stages follow once bus wires exist.
+ * The stages, in play order. Single-bit combinational and sequential stages; the multi-bit,
+ * memory and CPU stages follow once bus wires exist.
  */
 
 import type { Bit } from "../model.ts";
 import type { Stage } from "./types.ts";
-import { truthTable } from "./types.ts";
+import { sequence, truthTable } from "./types.ts";
 
 export type { Stage } from "./types.ts";
 
@@ -105,6 +105,102 @@ export const STAGES: readonly Stage[] = [
       return { s: (sum & 1) as Bit, co: bit(sum >= 2) };
     }),
     maxSize: { width: 24, height: 24 },
+  },
+  {
+    id: "sr-latch",
+    title: "SR latch",
+    description:
+      "s を 1 にすると q が 1 になり、s を 0 に戻しても保つ。r を 1 にすると q が 0 になる。出力を自分の入力へ戻すと状態を保てる。",
+    inputs: ["s", "r"],
+    outputs: ["q"],
+    steps: sequence(
+      [{ s: 0, r: 0 }, { q: 0 }],
+      [{ s: 1 }, { q: 1 }],
+      [{ s: 0 }, { q: 1 }],
+      [{ r: 1 }, { q: 0 }],
+      [{ r: 0 }, { q: 0 }],
+      [{ s: 1 }, { q: 1 }],
+      [{ s: 0 }, { q: 1 }],
+      [{ r: 1 }, { q: 0 }],
+      [{ r: 0 }, { q: 0 }],
+    ),
+    maxSize: SMALL,
+  },
+  {
+    id: "d-latch",
+    title: "D latch",
+    description:
+      "st が 1 の間は q が d に従い、st が 0 になるとその時の値を保つ。",
+    inputs: ["d", "st"],
+    outputs: ["q"],
+    steps: sequence(
+      [{ d: 0, st: 0 }, { q: 0 }],
+      [{ st: 1 }, { q: 0 }],
+      [{ d: 1 }, { q: 1 }],
+      [{ d: 0 }, { q: 0 }],
+      [{ d: 1 }, { q: 1 }],
+      [{ st: 0 }, { q: 1 }],
+      [{ d: 0 }, { q: 1 }],
+      [{ d: 1 }, { q: 1 }],
+      [{ st: 1 }, { q: 1 }],
+      [{ d: 0 }, { q: 0 }],
+      [{ st: 0 }, { q: 0 }],
+      [{ d: 1 }, { q: 0 }],
+      [{ st: 1 }, { q: 1 }],
+      [{ st: 0 }, { q: 1 }],
+    ),
+    maxSize: SMALL,
+  },
+  {
+    id: "dff",
+    title: "D flip-flop",
+    description:
+      "clk が 0 から 1 になった瞬間の d を q に取り込み、次の立ち上がりまで保つ。D ラッチを 2 個つなぎ、片方を clk の反転で動かす。",
+    inputs: ["d", "clk"],
+    outputs: ["q"],
+    steps: sequence(
+      [{ d: 0, clk: 0 }, { q: 0 }],
+      [{ d: 1 }, { q: 0 }],
+      [{ clk: 1 }, { q: 1 }],
+      [{ d: 0 }, { q: 1 }],
+      [{ clk: 0 }, { q: 1 }],
+      [{ d: 1 }, { q: 1 }],
+      [{ d: 0 }, { q: 1 }],
+      [{ clk: 1 }, { q: 0 }],
+      [{ d: 1 }, { q: 0 }],
+      [{ clk: 0 }, { q: 0 }],
+      [{ clk: 1 }, { q: 1 }],
+      [{ clk: 0 }, { q: 1 }],
+      [{ d: 0 }, { q: 1 }],
+      [{ clk: 1 }, { q: 0 }],
+    ),
+    maxSize: { width: 24, height: 24 },
+  },
+  {
+    id: "register-bit",
+    title: "1-bit register",
+    description:
+      "clk の立ち上がりで、st が 1 なら d を取り込み、0 なら今の値を保つ。フリップフロップの前にセレクタを置く。",
+    inputs: ["d", "st", "clk"],
+    outputs: ["q"],
+    steps: sequence(
+      [{ d: 0, st: 0, clk: 0 }, { q: 0 }],
+      [{ d: 1 }, { q: 0 }],
+      [{ clk: 1 }, { q: 0 }],
+      [{ clk: 0 }, { q: 0 }],
+      [{ st: 1 }, { q: 0 }],
+      [{ clk: 1 }, { q: 1 }],
+      [{ clk: 0 }, { q: 1 }],
+      [{ st: 0, d: 0 }, { q: 1 }],
+      [{ clk: 1 }, { q: 1 }],
+      [{ clk: 0 }, { q: 1 }],
+      [{ st: 1 }, { q: 1 }],
+      [{ clk: 1 }, { q: 0 }],
+      [{ clk: 0 }, { q: 0 }],
+      [{ d: 1, st: 0 }, { q: 0 }],
+      [{ clk: 1 }, { q: 0 }],
+    ),
+    maxSize: { width: 32, height: 24 },
   },
 ];
 

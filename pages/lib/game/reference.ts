@@ -66,7 +66,50 @@ export const SELECTOR: Design = design(4, 3)
   )
   .build();
 
-/** Registered forms of the gates above, for building the composite references. */
+/**
+ * SR latch: `s` drives q through a default-off relay; q holds itself through a second default-off
+ * relay in series with a default-on relay that `r` opens.
+ */
+export const SR_LATCH: Design = design(4, 3)
+  .input("s", "n", 1).input("r", "s", 2).output("q", "e", 0)
+  .place("one", 0, 0).place("relay-off", 1, 0).wire(2, 0, "we").wire(
+    3,
+    0,
+    "wes",
+  )
+  .wire(1, 1, "es").wire(2, 1, "we").wire(3, 1, "nsw")
+  .place("one", 0, 2).place("relay-off", 1, 2).place("relay-on", 2, 2, 2, true)
+  .wire(3, 2, "wn")
+  .build();
+
+/**
+ * D latch: while `st` is 1 a default-off relay passes `d` to q; while it is 0 a default-on relay
+ * feeds q back into itself through a loop of wire, so q keeps its value.
+ */
+export const D_LATCH: Design = design(4, 3)
+  .input("d", "s", 3).input("st", "s", 1).output("q", "e", 1)
+  .wire(0, 0, "es").wire(1, 0, "we").wire(2, 0, "ws")
+  .wire(0, 1, "ne").place("relay-on", 1, 1, 2, true).wire(2, 1, "wne").wire(
+    3,
+    1,
+    "wse",
+  )
+  .wire(1, 2, "sne").wire(2, 2, "we").place("relay-off", 3, 2, 3)
+  .build();
+
+/** Registered forms of the designs above, for building the composite references. */
+export const NOT_COMPONENT: ComponentDef = component(
+  "not",
+  "NOT 2×1",
+  "not",
+  NOT,
+);
+export const D_LATCH_COMPONENT: ComponentDef = component(
+  "dl",
+  "D latch 4×3",
+  "d-latch",
+  D_LATCH,
+);
 export const XOR_COMPONENT: ComponentDef = component(
   "xor",
   "XOR 4×3",
@@ -95,6 +138,30 @@ export const HALF_ADDER: Design = design(6, 5)
   .wire(3, 2, "we").wire(4, 2, "nw")
   .build();
 
+/**
+ * D flip-flop, master-slave: the master latch (rotated, right) stores while clk is 0 through a
+ * NOT, the slave (left) stores while clk is 1, so q takes the master's value on the rising edge.
+ */
+export const DFF: Design = design(10, 6)
+  .input("d", "n", 5).input("clk", "s", 1).output("q", "n", 4)
+  .place("dl", 0, 1).place("dl", 5, 2, 2).place("not", 7, 0, 1)
+  .wire(5, 0, "ns").wire(5, 1, "ns")
+  .wire(4, 0, "ns").wire(4, 1, "ns").wire(4, 2, "wn")
+  .wire(4, 3, "es").wire(4, 4, "nw").wire(3, 4, "en")
+  .wire(1, 5, "sne").wire(1, 4, "sn")
+  .wire(2, 5, "we").wire(3, 5, "we").wire(4, 5, "we").wire(5, 5, "we").wire(
+    6,
+    5,
+    "we",
+  )
+  .wire(7, 5, "we").wire(8, 5, "we").wire(9, 5, "wn")
+  .wire(9, 4, "ns").wire(9, 3, "ns").wire(9, 2, "ns").wire(9, 1, "sw").wire(
+    8,
+    1,
+    "ew",
+  )
+  .build();
+
 export const REFERENCES: Readonly<Record<string, Design>> = {
   not: NOT,
   nand: NAND,
@@ -103,12 +170,17 @@ export const REFERENCES: Readonly<Record<string, Design>> = {
   xor: XOR,
   selector: SELECTOR,
   "half-adder": HALF_ADDER,
+  "sr-latch": SR_LATCH,
+  "d-latch": D_LATCH,
+  dff: DFF,
 };
 
 /** Components the composite references need. */
 export const REFERENCE_COMPONENTS: readonly ComponentDef[] = [
   XOR_COMPONENT,
   AND_COMPONENT,
+  NOT_COMPONENT,
+  D_LATCH_COMPONENT,
 ];
 
 /** The area to beat, where a reference exists. */

@@ -32,3 +32,16 @@ export function truthTable(
   }
   return steps;
 }
+
+/** A hand-written sequence: each entry changes some inputs, then checks some outputs. */
+export function sequence(
+  ...entries: [set: Record<string, Bit>, expect: Record<string, Bit>][]
+): Step[] {
+  return entries.map(([set, expect], i) => ({
+    set,
+    expect,
+    label: `${i + 1}: ${
+      Object.entries(set).map(([k, v]) => `${k}=${v}`).join(" ")
+    }`,
+  }));
+}
