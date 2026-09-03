@@ -218,7 +218,12 @@ export function movePin(
   return { ...design, pins };
 }
 
-/** Changes the board size. Fails if anything would fall outside. */
+/**
+ * Changes the board size. Growing adds room on the right and bottom. Shrinking removes empty
+ * rows or columns from whichever edge has them: the right (bottom) edge first, else the left
+ * (top) edge, in which case everything shifts. A row or column counts as occupied when a cell, a
+ * component or a border pin on that edge sits in it. Fails if nothing can be removed.
+ */
 export function resize(
   design: Design,
   library: Library,
@@ -231,23 +236,65 @@ export function resize(
   ) {
     return undefined;
   }
-  const next = { ...design, width, height };
+  let next: Design | undefined = design;
+  while (next !== undefined && next.width > width) {
+    next = shrink(next, library, "x");
+  }
+  while (next !== undefined && next.height > height) {
+    next = shrink(next, library, "y");
+  }
+  if (next === undefined) return undefined;
+  return { ...next, width, height };
+}
+
+/** Removes one empty column (`axis` x) or row (`axis` y), from the far edge if it is empty, else from the near edge. */
+function shrink(
+  design: Design,
+  library: Library,
+  axis: "x" | "y",
+): Design | undefined {
+  const size = axis === "x" ? design.width : design.height;
+  const used = new Set<number>();
   for (const key of Object.keys(design.cells)) {
-    if (!inBoard(next, parseCellKey(key))) return undefined;
+    used.add(parseCellKey(key)[axis]);
   }
   for (const placement of design.placements) {
     const def = library.get(placement.componentId);
     if (def === undefined) return undefined;
-    const fp = footprint(def, placement);
-    if (placement.x + fp.width > width || placement.y + fp.height > height) {
-      return undefined;
-    }
+    for (const cell of occupiedCells(def, placement)) used.add(cell[axis]);
   }
   for (const pin of design.pins) {
-    const limit = pin.side === "n" || pin.side === "s" ? width : height;
-    if (pin.index >= limit) return undefined;
+    const along = pin.side === "n" || pin.side === "s" ? "x" : "y";
+    if (along === axis) used.add(pin.index);
   }
-  return next;
+  if (!used.has(size - 1)) {
+    return axis === "x"
+      ? { ...design, width: size - 1 }
+      : { ...design, height: size - 1 };
+  }
+  if (!used.has(0)) return shift(design, axis, -1);
+  return undefined;
+}
+
+/** Moves every cell, component and edge pin along an axis. */
+function shift(design: Design, axis: "x" | "y", by: number): Design {
+  const cells: Record<string, Cell> = {};
+  for (const [key, cell] of Object.entries(design.cells)) {
+    const p = parseCellKey(key);
+    p[axis] += by;
+    cells[cellKey(p.x, p.y)] = cell;
+  }
+  return {
+    ...design,
+    width: axis === "x" ? design.width + by : design.width,
+    height: axis === "y" ? design.height + by : design.height,
+    cells,
+    placements: design.placements.map((p) => ({ ...p, [axis]: p[axis] + by })),
+    pins: design.pins.map((pin) => {
+      const along = pin.side === "n" || pin.side === "s" ? "x" : "y";
+      return along === axis ? { ...pin, index: pin.index + by } : pin;
+    }),
+  };
 }
 
 /** A fresh board for a stage: inputs down the west side, outputs down the east side. */

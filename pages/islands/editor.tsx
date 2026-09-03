@@ -735,7 +735,10 @@ export const Editor = island(
               ? edit.resize(design, library, value, design.height)
               : edit.resize(design, library, design.width, value);
             if (next === undefined) input.value = String(design[which]);
-            commit(next, "縮めると収まらないものがあります");
+            commit(
+              next,
+              "空いている行や列がありません。端の配線や部品、ピンをどかしてください",
+            );
           })]}
         />
       );
