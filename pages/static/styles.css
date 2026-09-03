@@ -138,3 +138,491 @@ code {
   padding: 0.3rem 0.6rem;
   border: 1px solid var(--border);
 }
+
+/* ---- editor ---------------------------------------------------------------------------------- */
+
+body:has(.editor) .site-header,
+body:has(.editor) .site-main,
+body:has(.editor) .site-footer {
+  max-width: 80rem;
+}
+
+.stage-head h1 {
+  margin-bottom: 0.25rem;
+}
+
+.stage-head p {
+  margin: 0.25rem 0;
+}
+
+.stage-head .meta {
+  color: var(--muted);
+  display: flex;
+  gap: 1rem;
+}
+
+.part .label.small {
+  font-size: 9px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 60rem) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+.board-wrap {
+  overflow-x: auto;
+}
+
+.board {
+  width: 100%;
+  height: auto;
+  touch-action: none;
+  user-select: none;
+  --wire: var(--fg);
+  --wire-on: #16a34a;
+  --short: #dc2626;
+}
+
+.board.tool-wire,
+.board.tool-cross,
+.board.tool-erase,
+.board.tool-place {
+  cursor: crosshair;
+}
+
+.board-bg {
+  fill: var(--card);
+}
+
+.grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.problem {
+  fill: rgba(220, 38, 38, 0.25);
+}
+
+.wire {
+  stroke: var(--wire);
+  stroke-width: 4;
+  stroke-linecap: round;
+  fill: var(--wire);
+}
+
+.wire.bus {
+  stroke-width: 9;
+}
+
+.wire.on {
+  stroke: var(--wire-on);
+  fill: var(--wire-on);
+}
+
+.wire.short {
+  stroke: var(--short);
+  fill: var(--short);
+}
+
+.part rect {
+  fill: var(--bg);
+  stroke: var(--fg);
+  stroke-width: 1.5;
+}
+
+.part.prim-relay-on rect {
+  fill: color-mix(in srgb, var(--accent) 25%, var(--bg));
+}
+
+.part.prim-relay-off rect {
+  fill: var(--bg);
+  stroke: var(--accent);
+}
+
+.part.prim-one rect {
+  fill: color-mix(in srgb, #16a34a 30%, var(--bg));
+}
+
+.part.selected rect {
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-dasharray: 6 3;
+}
+
+.part.ghost {
+  opacity: 0.5;
+}
+
+.part.ghost.bad rect {
+  stroke: var(--short);
+  fill: rgba(220, 38, 38, 0.2);
+}
+
+.part .label {
+  text-anchor: middle;
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--fg);
+  pointer-events: none;
+}
+
+.pinmark {
+  fill: var(--wire);
+  stroke: none;
+}
+
+.pinmark.on {
+  fill: var(--wire-on);
+}
+
+.pinmark.short {
+  fill: var(--short);
+}
+
+.pinname {
+  text-anchor: middle;
+  font-size: 8px;
+  fill: var(--muted);
+  pointer-events: none;
+}
+
+.pinname.small {
+  font-size: 6.5px;
+}
+
+.pinmark.bus {
+  stroke: var(--bg);
+  stroke-width: 1.5;
+}
+
+.pin.bus circle {
+  stroke-width: 3;
+}
+
+.pin.bus text {
+  font-size: 10px;
+}
+
+.pin .busname {
+  font-size: 7px;
+  font-weight: 600;
+  fill: var(--muted);
+}
+
+.pin.on .busname {
+  fill: var(--muted);
+}
+
+.stub.bus {
+  stroke-width: 5;
+}
+
+.stub.bus.connected {
+  stroke-width: 8;
+}
+
+.part.prim-split rect {
+  fill: color-mix(in srgb, var(--muted) 20%, var(--bg));
+}
+
+.bus-inputs label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+}
+
+.bus-inputs input {
+  width: 4.5rem;
+}
+
+.stub {
+  stroke: var(--muted);
+  stroke-width: 3;
+  stroke-dasharray: 3 3;
+  fill: none;
+}
+
+.stub.connected {
+  stroke: var(--wire);
+  stroke-dasharray: none;
+  stroke-width: 4;
+}
+
+.stub.connected.on {
+  stroke: var(--wire-on);
+}
+
+.stub.short {
+  stroke: var(--short);
+}
+
+.pin circle {
+  fill: var(--bg);
+  stroke: var(--fg);
+  stroke-width: 2;
+}
+
+.pin.in circle {
+  cursor: pointer;
+}
+
+.pin.on circle {
+  fill: var(--wire-on);
+  stroke: var(--wire-on);
+}
+
+.pin.short circle {
+  stroke: var(--short);
+}
+
+.pin text {
+  text-anchor: middle;
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--fg);
+  pointer-events: none;
+}
+
+.pin.on text {
+  fill: #fff;
+}
+
+.toolbar .group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+  align-items: center;
+}
+
+.toolbar button {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.toolbar button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.toolbar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.toolbar input[type="number"] {
+  width: 4rem;
+  font: inherit;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.toolbar .hint,
+.tests .hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.toolbar .message {
+  color: var(--short, #dc2626);
+  font-size: 0.9rem;
+}
+
+.tests table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tests th,
+.tests td {
+  padding: 0.2rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.tests tr.ng td:first-child {
+  color: #dc2626;
+}
+
+.tests tr.ok td:first-child {
+  color: #16a34a;
+}
+
+.tests tbody tr {
+  cursor: pointer;
+}
+
+.tests tbody tr:hover {
+  background: var(--card);
+}
+
+.tests .problems,
+.tests .sim-error {
+  color: #dc2626;
+}
+
+.tests .pass {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+/* ---- library ---------------------------------------------------------------------------------- */
+
+.progress.cleared {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.library-actions button,
+.library-actions .import {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.library-actions .import input {
+  display: none;
+}
+
+.library-actions .danger {
+  margin-left: auto;
+  color: #dc2626;
+}
+
+.library table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+.library th,
+.library td {
+  padding: 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: middle;
+}
+
+.library td.pins {
+  font-family: ui-monospace, monospace;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.library input[type="text"] {
+  font: inherit;
+  width: 100%;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 0.3rem;
+  background: transparent;
+  color: var(--fg);
+}
+
+.library input[type="text"]:hover,
+.library input[type="text"]:focus {
+  border-color: var(--border);
+  background: var(--bg);
+}
+
+.library h2 small {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.library .muted {
+  color: var(--muted);
+}
+
+.library .message,
+.toolbar .message {
+  color: var(--accent);
+}
+
+.register form {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.register input {
+  flex: 1;
+  font: inherit;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.register button {
+  font: inherit;
+  padding: 0.3rem 0.7rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.4rem;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+.toolbar .group-title {
+  font-size: 0.8rem;
+  color: var(--muted);
+  width: 100%;
+}
+
+.tests h3 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.tests .play {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.tests tr.shown {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+}

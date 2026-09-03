@@ -13,6 +13,12 @@ export const description =
 /** The progress column is the one island on the page. */
 export const islands: readonly string[] = ["progress"];
 
+function specs(pins: readonly { name: string; width: number }[]): string {
+  return pins.map((p) => p.width > 1 ? `${p.name}[${p.width}]` : p.name).join(
+    ", ",
+  );
+}
+
 export default function Home(): RemixNode {
   return (
     <>
@@ -24,7 +30,7 @@ export default function Home(): RemixNode {
       </p>
       <p>
         ルールと設計は<Link href={`${base}/plan`}>企画書</Link>にある。
-        エディタは準備中で、いまはエンジンとステージ定義だけがある。
+        ステージ名を押すとエディタが開く。進み具合はこのブラウザに保存される。
       </p>
       <h2>ステージ</h2>
       <table class="stages">
@@ -43,12 +49,14 @@ export default function Home(): RemixNode {
             <tr key={stage.id}>
               <td>{i + 1}</td>
               <td>
-                <strong>{stage.title}</strong>
+                <Link href={`${base}/play/${stage.id}`}>
+                  <strong>{stage.title}</strong>
+                </Link>
                 <br />
                 <small>{stage.description}</small>
               </td>
-              <td>{stage.inputs.join(", ")}</td>
-              <td>{stage.outputs.join(", ")}</td>
+              <td>{specs(stage.inputs)}</td>
+              <td>{specs(stage.outputs)}</td>
               <td>{par(stage.id) ?? "-"}</td>
               <td>
                 <Progress stageId={stage.id} />

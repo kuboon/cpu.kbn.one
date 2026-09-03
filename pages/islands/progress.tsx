@@ -18,6 +18,10 @@ export const Progress = island(
       best = loadSave()?.best[handle.props.stageId];
       if (best !== undefined) handle.update();
     }, 0);
-    return () => <span class="progress">{best ?? "-"}</span>;
+    return () => (
+      <span class={best === undefined ? "progress" : "progress cleared"}>
+        {best === undefined ? "-" : `✓ ${best}`}
+      </span>
+    );
   },
 );
