@@ -28,8 +28,7 @@ export { base };
 /**
  * Where the crawl starts.
  *
- * Everything else is reached by following links, so the blog index listing its articles is what
- * makes them part of the site.
+ * Everything else is reached by following links.
  */
 export const entryPoints: readonly string[] = ["/"];
 

@@ -1,5 +1,5 @@
 /**
- * The document shell — this site's, not the framework's.
+ * The document shell.
  *
  * It also carries the one thing the browser cannot work out for itself: the map from an island's
  * name to the chunk the bundler emitted, plus the scripts that load them. A page that places no
@@ -23,6 +23,8 @@ export interface LayoutProps {
   children: RemixNode;
 }
 
+export const SITE_NAME = "cpu.kbn.one";
+
 /**
  * Renders a page inside the document shell.
  *
@@ -35,7 +37,7 @@ export async function renderPage(props: LayoutProps): Promise<string> {
   const home = base === "" ? "/" : base;
 
   const html = await renderToString(
-    <html lang="en">
+    <html lang="ja">
       <head>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -48,23 +50,16 @@ export async function renderPage(props: LayoutProps): Promise<string> {
       </head>
       <body>
         <header class="site-header">
-          <Link class="brand" href={home}>remix-ssg</Link>
+          <Link class="brand" href={home}>{SITE_NAME}</Link>
           <nav class="site-nav">
-            <Link href={home}>Home</Link>
-            <Link href={`${base}/about`}>About</Link>
-            <Link href={`${base}/blog`}>Blog</Link>
-            {/* Showcase: delete this link when you delete the showcase — see README. */}
-            <Link href={`${base}/showcase`}>UI showcase</Link>
+            <Link href={home}>ステージ</Link>
             <Link href={`${base}/plan`}>企画書</Link>
           </nav>
         </header>
         <main class="site-main">{props.children}</main>
         <footer class="site-footer">
           <p>
-            Built with{" "}
-            <a href="https://jsr.io/@kuboon/remix-ssg">@kuboon/remix-ssg</a> and
-            {" "}
-            <a href="https://remix.run">Remix v3</a>.
+            <a href="https://github.com/kuboon/cpu.kbn.one">GitHub</a>
           </p>
         </footer>
         {chunks.length > 0
