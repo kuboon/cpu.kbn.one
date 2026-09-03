@@ -26,6 +26,7 @@ pages/
     document.ts      # front-matter for Markdown pages
     markdown.ts      # Markdown → a Remix UI tree (@kuboon/md)
     link.tsx         # internal <Link> (full-document navigation)
+    stage-pages.tsx  # the /play/<stage> editor pages, one per stage definition
     game/            # the engine — no DOM, tested with `deno test`
       model.ts       # designs, cells, placements, components
       transform.ts   # where a placed component's pins land
@@ -36,10 +37,13 @@ pages/
       reference.ts   # hand-built reference solutions (pars)
       storage.ts     # save data
       builder.ts     # terse design construction for references and tests
+      edit.ts        # editing operations (pure functions over a design)
   pages/
     index.tsx        # home — the stage list
     plan.md          # the design document
-  islands/           # hydrated client components (the editor will live here)
+  islands/
+    editor.tsx       # the stage editor: board, palette, live simulation, tests
+    progress.tsx     # a stage's best area, from the browser's save
   static/            # files served under /static/*
 ```
 

@@ -39,6 +39,8 @@ export interface Netlist {
   cellNets: Record<string, number[]>;
   /** Top-level border pin index -> net. */
   pinNets: number[];
+  /** Top-level placement index -> pin index -> net. */
+  placementPinNets: number[][];
 }
 
 /** A rule the design breaks, located for the editor. */
@@ -172,6 +174,7 @@ export function buildNetlist(design: Design, library: Library): Netlist {
   }[] = [];
   const ones: string[] = [];
   const stack: string[] = [];
+  const topPlacementPins: string[][] = [];
 
   const face = (prefix: string, x: number, y: number, side: string) =>
     `${prefix}@${x},${y}:${side}`;
@@ -227,6 +230,9 @@ export function buildNetlist(design: Design, library: Library): Netlist {
       const pinKey = (pinIndex: number) => `${path}#${pinIndex}`;
       for (const wp of worldPins(def, placement)) {
         uf.union(pinKey(wp.index), face(prefix, wp.x, wp.y, wp.side));
+      }
+      if (prefix === "") {
+        topPlacementPins[pi] = def.pins.map((_, i) => pinKey(i));
       }
       if (def.primitive === "one") {
         ones.push(pinKey(0));
@@ -297,6 +303,7 @@ export function buildNetlist(design: Design, library: Library): Netlist {
     outputs,
     cellNets,
     pinNets,
+    placementPinNets: topPlacementPins.map((keys) => keys.map(net)),
     netCount: netIds.size,
   };
 }

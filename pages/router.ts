@@ -21,6 +21,7 @@ import type { FileServerBehavior } from "@kuboon/remix-ssg/site";
 import { base } from "./lib/base.ts";
 import { markdown } from "./transforms/markdown.tsx";
 import { page } from "./transforms/page.tsx";
+import { stagePages } from "./lib/stage-pages.tsx";
 
 /** Deploy path prefix. The build strips it back off when writing, so output lands at the root. */
 export { base };
@@ -53,6 +54,7 @@ export default serveAsHost(
         page({ base, islandUrls: islands.urls }),
       ],
     }),
+    stagePages({ base, islandUrls: islands.urls }),
     await createFileTree({
       rootDir: "static",
       basePath: `${base}/static`,

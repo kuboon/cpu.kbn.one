@@ -8,7 +8,7 @@
 ## 構成
 
 - `pages/lib/game/`：DOM に依存しないエンジン。データモデル、ネットリスト抽出、シミュレータ、ステージ定義、参照解、保存形式。
-- `pages/islands/`：ブラウザで動く部分（エディタ。準備中）。
+- `pages/islands/`：ブラウザで動く部分。ステージのエディタと進捗表示。
 - `pages/pages/`：サイトのページ。
 
 サイトは [Remix v3](https://remix.run) と [`@kuboon/remix-ssg`](https://jsr.io/@kuboon/remix-ssg) で静的に生成し、GitHub Pages に置く。

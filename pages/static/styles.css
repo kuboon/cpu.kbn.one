@@ -138,3 +138,277 @@ code {
   padding: 0.3rem 0.6rem;
   border: 1px solid var(--border);
 }
+
+/* ---- editor ---------------------------------------------------------------------------------- */
+
+body:has(.editor) .site-header,
+body:has(.editor) .site-main,
+body:has(.editor) .site-footer {
+  max-width: 80rem;
+}
+
+.stage-head h1 {
+  margin-bottom: 0.25rem;
+}
+
+.stage-head p {
+  margin: 0.25rem 0;
+}
+
+.stage-head .meta {
+  color: var(--muted);
+  display: flex;
+  gap: 1rem;
+}
+
+.part .label.small {
+  font-size: 9px;
+}
+
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 22rem;
+  gap: 1.5rem;
+  align-items: start;
+}
+
+@media (max-width: 60rem) {
+  .workspace {
+    grid-template-columns: 1fr;
+  }
+}
+
+.board-wrap {
+  overflow-x: auto;
+}
+
+.board {
+  width: 100%;
+  height: auto;
+  touch-action: none;
+  user-select: none;
+  --wire: var(--fg);
+  --wire-on: #16a34a;
+  --short: #dc2626;
+}
+
+.board.tool-wire,
+.board.tool-cross,
+.board.tool-erase,
+.board.tool-place {
+  cursor: crosshair;
+}
+
+.board-bg {
+  fill: var(--card);
+}
+
+.grid {
+  stroke: var(--border);
+  stroke-width: 1;
+}
+
+.problem {
+  fill: rgba(220, 38, 38, 0.25);
+}
+
+.wire {
+  stroke: var(--wire);
+  stroke-width: 4;
+  stroke-linecap: round;
+  fill: var(--wire);
+}
+
+.wire.on {
+  stroke: var(--wire-on);
+  fill: var(--wire-on);
+}
+
+.wire.short {
+  stroke: var(--short);
+  fill: var(--short);
+}
+
+.part rect {
+  fill: var(--bg);
+  stroke: var(--fg);
+  stroke-width: 1.5;
+}
+
+.part.prim-relay-on rect {
+  fill: color-mix(in srgb, var(--accent) 25%, var(--bg));
+}
+
+.part.prim-relay-off rect {
+  fill: var(--bg);
+  stroke: var(--accent);
+}
+
+.part.prim-one rect {
+  fill: color-mix(in srgb, #16a34a 30%, var(--bg));
+}
+
+.part.selected rect {
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-dasharray: 6 3;
+}
+
+.part.ghost {
+  opacity: 0.5;
+}
+
+.part.ghost.bad rect {
+  stroke: var(--short);
+  fill: rgba(220, 38, 38, 0.2);
+}
+
+.part .label {
+  text-anchor: middle;
+  font-size: 11px;
+  font-weight: 600;
+  fill: var(--fg);
+  pointer-events: none;
+}
+
+.pinmark {
+  fill: var(--wire);
+  stroke: none;
+}
+
+.pinmark.on {
+  fill: var(--wire-on);
+}
+
+.pinmark.short {
+  fill: var(--short);
+}
+
+.pinname {
+  text-anchor: middle;
+  font-size: 8px;
+  fill: var(--muted);
+  pointer-events: none;
+}
+
+.pin circle {
+  fill: var(--bg);
+  stroke: var(--fg);
+  stroke-width: 2;
+}
+
+.pin.in circle {
+  cursor: pointer;
+}
+
+.pin.on circle {
+  fill: var(--wire-on);
+  stroke: var(--wire-on);
+}
+
+.pin.short circle {
+  stroke: var(--short);
+}
+
+.pin text {
+  text-anchor: middle;
+  font-size: 9px;
+  font-weight: 700;
+  fill: var(--fg);
+  pointer-events: none;
+}
+
+.pin.on text {
+  fill: #fff;
+}
+
+.toolbar .group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-bottom: 0.6rem;
+  align-items: center;
+}
+
+.toolbar button {
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 0.3rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+.toolbar button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.toolbar button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.toolbar input[type="number"] {
+  width: 4rem;
+  font: inherit;
+  padding: 0.2rem 0.4rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.toolbar .hint,
+.tests .hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.toolbar .message {
+  color: var(--short, #dc2626);
+  font-size: 0.9rem;
+}
+
+.tests table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.tests th,
+.tests td {
+  padding: 0.2rem 0.4rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.tests tr.ng td:first-child {
+  color: #dc2626;
+}
+
+.tests tr.ok td:first-child {
+  color: #16a34a;
+}
+
+.tests tbody tr {
+  cursor: pointer;
+}
+
+.tests tbody tr:hover {
+  background: var(--card);
+}
+
+.tests .problems,
+.tests .sim-error {
+  color: #dc2626;
+}
+
+.tests .pass {
+  color: #16a34a;
+  font-weight: 600;
+}
