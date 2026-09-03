@@ -36,6 +36,9 @@ import type { Point, Slot } from "../lib/game/edit.ts";
 import { loadSave, storeSave } from "../lib/game/browser-storage.ts";
 import { componentFrom, emptySave, register } from "../lib/game/storage.ts";
 import type { SaveData } from "../lib/game/storage.ts";
+import { ACHIEVEMENTS, earned } from "../lib/game/achievements.ts";
+import { gameCenter, unlock } from "../lib/game/gamecenter.ts";
+import type { UnlockOutcome } from "../lib/game/gamecenter.ts";
 
 /** Pixels per cell in the SVG's own coordinates; the drawing scales to its container. */
 const CELL = 32;
@@ -120,6 +123,9 @@ export const Editor = island(
       storeSave(save);
     }
 
+    /** Achievements unlocked by the latest registration, with claim links where needed. */
+    let unlocked: UnlockOutcome[] = [];
+
     /** Registers the current board as a component of this stage. */
     function registerComponent(name: string): void {
       if (stage === undefined) return;
@@ -130,7 +136,89 @@ export const Editor = island(
       library = createLibrary(save.components);
       storeSave(save);
       registered = trimmed;
+      unlocked = [];
       handle.update();
+      awardAchievements(stage.id, area(design));
+    }
+
+    async function awardAchievements(
+      stageId: string,
+      cellArea: number,
+    ): Promise<void> {
+      const wins = earned(save, stageId, cellArea, par(stageId));
+      for (const win of wins) {
+        const outcome = await unlock(win.key, win.score);
+        unlocked = [...unlocked, outcome];
+        save = {
+          ...save,
+          achievements: {
+            ...save.achievements,
+            [win.key]: outcome.recorded ? "recorded" : "pending",
+          },
+        };
+        storeSave(save);
+        handle.update();
+      }
+    }
+
+    function markClaimed(key: string): void {
+      save = {
+        ...save,
+        achievements: { ...save.achievements, [key]: "recorded" },
+      };
+      storeSave(save);
+      unlocked = unlocked.map((u) =>
+        u.key === key ? { ...u, recorded: true } : u
+      );
+      handle.update();
+    }
+
+    /** Claim links for achievements the hub has not recorded yet, this stage's and older ones. */
+    function renderAchievements(): RemixNode {
+      const pending = Object.entries(save.achievements ?? {})
+        .filter(([, state]) => state === "pending")
+        .map(([key]) => key);
+      const fresh = unlocked.filter((u) => u.recorded);
+      if (pending.length === 0 && fresh.length === 0) return null;
+      const gc = gameCenter();
+      const titleOf = (key: string) =>
+        ACHIEVEMENTS.find((a) => a.key === key)?.title ?? key;
+      return (
+        <section class="achievements">
+          <h3>実績</h3>
+          {fresh.map((u) => (
+            <p key={u.key} class="recorded">
+              🏆 {titleOf(u.key)} を記録しました
+            </p>
+          ))}
+          {pending.length > 0
+            ? (
+              <>
+                <p class="hint">
+                  記録にはあなたの確認が要ります。リンクを押すと game-center
+                  で記録されます。
+                </p>
+                <ul>
+                  {pending.map((key) => (
+                    <li key={key}>
+                      🏆 {titleOf(key)}{" "}
+                      <a
+                        href={unlocked.find((u) => u.key === key)?.claimUrl ??
+                          gc?.claimUrl(key) ?? "#"}
+                        target="_blank"
+                        rel="noopener"
+                        mix={[on("click", () => markClaimed(key))]}
+                      >
+                        記録する
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )
+            : null}
+        </section>
+      );
     }
 
     /** Applies an edit: `undefined` means it was refused, and `why` is shown instead. */
@@ -208,6 +296,7 @@ export const Editor = island(
         handle.update();
         return;
       }
+      gameCenter();
       save = loadSave() ?? emptySave();
       library = createLibrary(save.components);
       design = save.drafts[stage.id] ?? edit.defaultDesign(stage);
@@ -1105,6 +1194,7 @@ export const Editor = island(
                 </p>
               </div>
               {renderTests()}
+              {renderAchievements()}
             </aside>
           </div>
         </div>

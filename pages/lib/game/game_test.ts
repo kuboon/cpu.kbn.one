@@ -21,6 +21,8 @@ import {
 } from "./cpu.ts";
 import { truthTable } from "./stages/types.ts";
 import { par, REFERENCE_COMPONENTS, REFERENCES } from "./reference.ts";
+import { ACHIEVEMENTS, earned, manifest } from "./achievements.ts";
+import type { SaveData } from "./storage.ts";
 import { worldPins } from "./transform.ts";
 import {
   componentFrom,
@@ -479,4 +481,46 @@ Deno.test("the reference CPU runs the test programs", () => {
   assertEquals(writes.length, 1);
   assertEquals(writes[0].expect.data, 7);
   assertEquals(steps.at(-1)?.expect.pc, 6);
+});
+
+Deno.test("achievements: the manifest is valid and registrations earn the right keys", () => {
+  const m = manifest();
+  assertEquals(m.author, "7499d00d-fcff-4630-91a0-c034893c8d08");
+  assert(/^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/.test(m.id as string));
+  assertEquals(
+    new Set(ACHIEVEMENTS.map((a) => a.key)).size,
+    ACHIEVEMENTS.length,
+  );
+  for (const a of ACHIEVEMENTS) {
+    assert(/^[a-z0-9][a-z0-9_-]{0,62}[a-z0-9]$/.test(a.key), a.key);
+  }
+
+  const keys = (e: { key: string }[]) => e.map((x) => x.key).sort();
+  let save: SaveData = { ...emptySave(), best: { not: 2 } };
+  assertEquals(keys(earned(save, "not", 2, 2)), ["first_clear", "on_par"]);
+  assertEquals(keys(earned(save, "not", 3, 2)), ["first_clear"]);
+  assertEquals(keys(earned(save, "not", 1, 2)), ["first_clear", "under_par"]);
+  // Already unlocked ones are not earned again.
+  save = {
+    ...save,
+    achievements: { first_clear: "recorded", on_par: "pending" },
+  };
+  assertEquals(keys(earned(save, "not", 2, 2)), []);
+  // The gate set completes with XOR.
+  save = { ...emptySave(), best: { not: 2, nand: 6, and: 3, or: 6, xor: 12 } };
+  assertEquals(keys(earned(save, "xor", 12, 12)), ["gates", "on_par"]);
+  // A bus stage earns first_bus; the CPU carries a score.
+  save = { ...emptySave(), best: { neg8: 16 } };
+  assertEquals(keys(earned(save, "neg8", 16, 16)), ["first_bus", "on_par"]);
+  save = { ...emptySave(), best: { cpu8: 5000 } };
+  assertEquals(earned(save, "cpu8", 5000, undefined), [{
+    key: "cpu",
+    score: 60536,
+  }, { key: "first_bus" }]);
+  // Everything cleared.
+  const all = Object.fromEntries(STAGES.map((s) => [s.id, 1]));
+  assert(
+    keys(earned({ ...emptySave(), best: all }, "switch", 1, undefined))
+      .includes("all_clear"),
+  );
 });

@@ -626,3 +626,12 @@ body:has(.editor) .site-footer {
 .tests tr.shown {
   background: color-mix(in srgb, var(--accent) 15%, transparent);
 }
+
+.achievements .recorded {
+  color: #16a34a;
+  font-weight: 600;
+}
+
+.achievements ul {
+  padding-left: 1.2rem;
+}
