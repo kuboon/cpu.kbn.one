@@ -124,17 +124,55 @@ Deno.test("slots map the margin to border positions and pins move between free s
   assertEquals(moved?.pins[0], { name: "a", dir: "in", side: "n", index: 2 });
 });
 
-Deno.test("resize refuses to cut anything off", () => {
-  const d = design(4, 3).wire(3, 0, "w").place("relay-on", 0, 2).input(
+Deno.test("resize trims empty edges, from the far side first, else by shifting", () => {
+  // Content in the bottom-right corner, pins on the right and bottom.
+  const d = design(4, 3).wire(3, 2, "n").place("relay-on", 2, 2).input(
     "a",
-    "s",
+    "e",
     2,
+  ).input("b", "s", 3)
+    .build();
+  // Shrinking the width removes the empty left column and shifts everything left.
+  const narrower = edit.resize(d, library, 3, 3)!;
+  assertEquals(narrower.cells, {
+    "2,2": { kind: "wire", n: true, e: false, s: false, w: false },
+  });
+  assertEquals(narrower.placements[0].x, 1);
+  assertEquals(narrower.pins.map((p) => `${p.side}${p.index}`), ["e2", "s2"]);
+  // Two columns off: both empty on the left.
+  assertEquals(edit.resize(d, library, 2, 3)?.placements[0].x, 0);
+  // Three columns off would cut the relay.
+  assertEquals(edit.resize(d, library, 1, 3), undefined);
+  // Shrinking the height removes the empty top rows and moves the east pin up.
+  const shorter = edit.resize(d, library, 4, 1)!;
+  assertEquals(shorter.placements[0].y, 0);
+  assertEquals(shorter.pins.map((p) => `${p.side}${p.index}`), ["e0", "s3"]);
+  assertEquals(edit.resize(d, library, 4, 0), undefined);
+
+  // The far edge goes first when it is empty, so nothing shifts.
+  const left = design(4, 3).wire(0, 0, "e").place("relay-on", 1, 0).input(
+    "a",
+    "n",
+    1,
   ).build();
-  assertEquals(edit.resize(d, library, 3, 3), undefined);
-  assertEquals(edit.resize(d, library, 4, 2), undefined);
-  assertEquals(edit.resize(d, library, 2, 3), undefined);
-  assertEquals(edit.resize(d, library, 0, 3), undefined);
-  assertEquals(edit.resize(d, library, 5, 4)?.width, 5);
+  const trimmed = edit.resize(left, library, 2, 1)!;
+  assertEquals(trimmed.cells["0,0"]?.kind, "wire");
+  assertEquals(trimmed.placements[0], {
+    componentId: "relay-on",
+    x: 1,
+    y: 0,
+    rotation: 0,
+    mirror: false,
+  });
+  assertEquals(trimmed.pins[0].index, 1);
+
+  // A pin on the edge keeps its column occupied.
+  const pinned = design(3, 1).input("a", "n", 0).place("relay-on", 2, 0)
+    .build();
+  assertEquals(edit.resize(pinned, library, 2, 1), undefined);
+
+  // Growing adds room on the right and bottom.
+  assertEquals(edit.resize(d, library, 5, 4)?.cells, d.cells);
 });
 
 Deno.test("a stage's default design has its pins and is empty", () => {
