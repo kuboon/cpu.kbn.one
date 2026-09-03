@@ -14,6 +14,8 @@ export interface SaveData {
   drafts: Record<string, Design>;
   /** Smallest registered area, by stage id. */
   best: Record<string, number>;
+  /** Game-center achievements: recorded by the hub, or pending the player's confirmation. */
+  achievements?: Record<string, "recorded" | "pending">;
 }
 
 export const STORAGE_KEY = "cpu.kbn.one/save";
@@ -37,6 +39,14 @@ export function parse(json: string): SaveData {
     components: Array.isArray(raw.components) ? raw.components : [],
     drafts: isRecord(raw.drafts) ? raw.drafts as Record<string, Design> : {},
     best: isRecord(raw.best) ? raw.best as Record<string, number> : {},
+    ...(isRecord(raw.achievements)
+      ? {
+        achievements: raw.achievements as Record<
+          string,
+          "recorded" | "pending"
+        >,
+      }
+      : {}),
   };
 }
 

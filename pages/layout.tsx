@@ -11,6 +11,7 @@ import type { RemixNode } from "@remix-run/ui";
 import { ISLAND_MAP_ELEMENT_ID } from "@kuboon/remix-ssg/client";
 
 import { Link } from "./lib/link.tsx";
+import { manifest } from "./lib/game/achievements.ts";
 
 /** What every page hands the shell. */
 export interface LayoutProps {
@@ -47,6 +48,10 @@ export async function renderPage(props: LayoutProps): Promise<string> {
           : null}
         <link rel="icon" href={`${base}/static/favicon.svg`} />
         <link rel="stylesheet" href={`${base}/static/styles.css`} />
+        {/* game-center (https://ga-cen.kbn.one) reads this; browsers ignore the type. */}
+        <script type="application/gamecenter+json">
+          {JSON.stringify(manifest())}
+        </script>
       </head>
       <body>
         <header class="site-header">

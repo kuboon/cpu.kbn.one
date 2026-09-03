@@ -2,6 +2,7 @@ import type { Handle } from "@remix-run/ui";
 import { island } from "@kuboon/remix-ssg/client";
 
 import { loadSave } from "../lib/game/browser-storage.ts";
+import { gameCenter } from "../lib/game/gamecenter.ts";
 
 /**
  * The player's best area on one stage, read from the browser's save data.
@@ -15,6 +16,8 @@ export const Progress = island(
   function Progress(handle: Handle<{ stageId: string }>) {
     let best: number | undefined;
     setTimeout(() => {
+      // Picks up a game-center launch token when the hub opens the stage list.
+      gameCenter();
       best = loadSave()?.best[handle.props.stageId];
       if (best !== undefined) handle.update();
     }, 0);
