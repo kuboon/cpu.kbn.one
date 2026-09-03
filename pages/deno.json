@@ -5,33 +5,63 @@
     "check": "deno check router.ts layout.tsx islands lib pages transforms && deno lint && deno fmt --check"
   },
   "nodeModulesDir": "auto",
-  "unstable": ["bundle"],
+  "unstable": [
+    "bundle"
+  ],
   "permissions": {
     "build": {
-      "read": ["."],
-      "write": ["dist"],
+      "read": [
+        "."
+      ],
+      "write": [
+        "dist"
+      ],
       "env": {
-        "allow": ["BASE_URL"],
-        "ignore": ["NODE_ENV", "VSCODE_TEXTMATE_DEBUG"]
+        "allow": [
+          "BASE_URL"
+        ],
+        "ignore": [
+          "NODE_ENV",
+          "VSCODE_TEXTMATE_DEBUG"
+        ]
       },
       "import": true
     },
     "dev": {
-      "read": ["."],
+      "read": [
+        "."
+      ],
       "env": {
-        "allow": ["BASE_URL", "PORT"],
-        "ignore": ["NODE_ENV", "VSCODE_TEXTMATE_DEBUG"]
+        "allow": [
+          "BASE_URL",
+          "PORT"
+        ],
+        "ignore": [
+          "NODE_ENV",
+          "VSCODE_TEXTMATE_DEBUG"
+        ]
       },
-      "net": ["0.0.0.0", "127.0.0.1", "localhost"],
+      "net": [
+        "0.0.0.0",
+        "127.0.0.1",
+        "localhost"
+      ],
       "import": true
     }
   },
   "minimumDependencyAge": {
     "age": "P1D",
-    "exclude": ["jsr:@kuboon/*"]
+    "exclude": [
+      "jsr:@kuboon/*"
+    ]
   },
   "compilerOptions": {
-    "lib": ["deno.ns", "dom", "dom.iterable", "esnext"],
+    "lib": [
+      "deno.ns",
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "jsx": "react-jsx",
     "jsxImportSource": "@remix-run/ui"
   },
@@ -63,9 +93,16 @@
     "@std/path": "jsr:@std/path@^1.1.6"
   },
   "fmt": {
-    "exclude": ["dist", "node_modules"]
+    "exclude": [
+      "dist",
+      "node_modules"
+    ],
+    "proseWrap": "preserve"
   },
   "lint": {
-    "exclude": ["dist", "node_modules"]
+    "exclude": [
+      "dist",
+      "node_modules"
+    ]
   }
 }
