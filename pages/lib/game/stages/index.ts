@@ -364,7 +364,167 @@ export const STAGES: readonly Stage[] = [
     ),
     maxSize: { width: 64, height: 64 },
   },
+  {
+    id: "logic8",
+    title: "Logic unit (8-bit)",
+    description:
+      "op1 op0 で演算を選ぶ。00: x AND y、01: x OR y、10: x XOR y、11: NOT x。ビットごとに同じ回路を 8 個並べ、セレクタで選ぶ。",
+    inputs: [bus("x"), bus("y"), { name: "op1", width: 1 }, {
+      name: "op0",
+      width: 1,
+    }],
+    outputs: [bus("out")],
+    steps: vectors(
+      ({ x, y, op1, op0 }) => ({ out: logic(x, y, op1 * 2 + op0) }),
+      [
+        { x: 0b11001100, y: 0b10101010, op1: 0, op0: 0 },
+        { x: 0b11001100, y: 0b10101010, op1: 0, op0: 1 },
+        { x: 0b11001100, y: 0b10101010, op1: 1, op0: 0 },
+        { x: 0b11001100, y: 0b10101010, op1: 1, op0: 1 },
+        { x: 0, y: 255, op1: 0, op0: 0 },
+        { x: 0, y: 255, op1: 0, op0: 1 },
+        { x: 0, y: 255, op1: 1, op0: 0 },
+        { x: 0, y: 255, op1: 1, op0: 1 },
+        { x: 15, y: 15, op1: 1, op0: 0 },
+      ],
+    ),
+    maxSize: { width: 64, height: 64 },
+  },
+  {
+    id: "arith8",
+    title: "Arithmetic unit (8-bit)",
+    description:
+      "op1 op0 で演算を選ぶ。00: x + y、01: x + 1、10: x - y、11: x - 1。結果は下 8 ビット。加算器 1 個に、y の反転と定数の切り替えを前置して作れる。",
+    inputs: [bus("x"), bus("y"), { name: "op1", width: 1 }, {
+      name: "op0",
+      width: 1,
+    }],
+    outputs: [bus("out")],
+    steps: vectors(
+      ({ x, y, op1, op0 }) => ({ out: arith(x, y, op1 * 2 + op0) }),
+      [
+        { x: 5, y: 3, op1: 0, op0: 0 },
+        { x: 5, y: 3, op1: 0, op0: 1 },
+        { x: 5, y: 3, op1: 1, op0: 0 },
+        { x: 5, y: 3, op1: 1, op0: 1 },
+        { x: 255, y: 1, op1: 0, op0: 0 },
+        { x: 255, y: 0, op1: 0, op0: 1 },
+        { x: 0, y: 1, op1: 1, op0: 0 },
+        { x: 0, y: 0, op1: 1, op0: 1 },
+        { x: 200, y: 100, op1: 0, op0: 0 },
+        { x: 100, y: 200, op1: 1, op0: 0 },
+      ],
+    ),
+    maxSize: { width: 64, height: 64 },
+  },
+  {
+    id: "alu8",
+    title: "ALU (8-bit)",
+    description:
+      "u が 0 なら算術ユニット、1 なら論理ユニットの結果を出す。zx が 1 なら x を 0 に置き換え、sw が 1 なら x と y を入れ替えてから渡す。",
+    inputs: [
+      bus("x"),
+      bus("y"),
+      { name: "u", width: 1 },
+      { name: "op1", width: 1 },
+      { name: "op0", width: 1 },
+      { name: "zx", width: 1 },
+      { name: "sw", width: 1 },
+    ],
+    outputs: [bus("out")],
+    steps: vectors(
+      ({ x, y, u, op1, op0, zx, sw }) => ({
+        out: alu(x, y, u, op1 * 2 + op0, zx, sw),
+      }),
+      [
+        { x: 5, y: 3, u: 0, op1: 0, op0: 0, zx: 0, sw: 0 },
+        { x: 5, y: 3, u: 0, op1: 1, op0: 0, zx: 0, sw: 0 },
+        { x: 5, y: 3, u: 0, op1: 1, op0: 0, zx: 0, sw: 1 },
+        { x: 5, y: 3, u: 0, op1: 0, op0: 1, zx: 1, sw: 0 },
+        { x: 5, y: 3, u: 0, op1: 1, op0: 0, zx: 1, sw: 0 },
+        { x: 0b11001100, y: 0b10101010, u: 1, op1: 0, op0: 0, zx: 0, sw: 0 },
+        { x: 0b11001100, y: 0b10101010, u: 1, op1: 1, op0: 1, zx: 0, sw: 0 },
+        { x: 0b11001100, y: 0b10101010, u: 1, op1: 1, op0: 1, zx: 0, sw: 1 },
+        { x: 0b11001100, y: 0b10101010, u: 1, op1: 1, op0: 1, zx: 1, sw: 0 },
+        { x: 0b11001100, y: 0b10101010, u: 1, op1: 0, op0: 1, zx: 1, sw: 1 },
+        { x: 255, y: 1, u: 0, op1: 0, op0: 0, zx: 0, sw: 0 },
+      ],
+    ),
+    maxSize: { width: 64, height: 64 },
+  },
+  {
+    id: "cond8",
+    title: "Condition (8-bit)",
+    description:
+      "x を 2 の補数と見て、負なら lt、ゼロなら eq、正なら gt を見る。該当する条件が 1 なら out を 1 にする。",
+    inputs: [bus("x"), { name: "lt", width: 1 }, { name: "eq", width: 1 }, {
+      name: "gt",
+      width: 1,
+    }],
+    outputs: pins("out"),
+    steps: vectors(({ x, lt, eq, gt }) => ({ out: cond(x, lt, eq, gt) }), [
+      { x: 0, lt: 0, eq: 0, gt: 0 },
+      { x: 0, lt: 0, eq: 1, gt: 0 },
+      { x: 0, lt: 1, eq: 0, gt: 1 },
+      { x: 5, lt: 0, eq: 0, gt: 1 },
+      { x: 5, lt: 1, eq: 1, gt: 0 },
+      { x: 200, lt: 1, eq: 0, gt: 0 },
+      { x: 200, lt: 0, eq: 1, gt: 1 },
+      { x: 128, lt: 1, eq: 0, gt: 0 },
+      { x: 127, lt: 0, eq: 0, gt: 1 },
+      { x: 255, lt: 1, eq: 1, gt: 1 },
+    ]),
+    maxSize: { width: 32, height: 32 },
+  },
 ];
+
+/** The logic unit's function table. */
+export function logic(x: number, y: number, op: number): number {
+  switch (op) {
+    case 0:
+      return x & y;
+    case 1:
+      return x | y;
+    case 2:
+      return x ^ y;
+    default:
+      return ~x & 255;
+  }
+}
+
+/** The arithmetic unit's function table, modulo 256. */
+export function arith(x: number, y: number, op: number): number {
+  switch (op) {
+    case 0:
+      return (x + y) & 255;
+    case 1:
+      return (x + 1) & 255;
+    case 2:
+      return (x - y) & 255;
+    default:
+      return (x - 1) & 255;
+  }
+}
+
+export function alu(
+  x: number,
+  y: number,
+  u: number,
+  op: number,
+  zx: number,
+  sw: number,
+): number {
+  let a = zx ? 0 : x;
+  let b = y;
+  if (sw) [a, b] = [b, a];
+  return u ? logic(a, b, op) : arith(a, b, op);
+}
+
+export function cond(x: number, lt: number, eq: number, gt: number): number {
+  const negative = x >= 128;
+  const zero = x === 0;
+  return (negative && lt) || (zero && eq) || (!negative && !zero && gt) ? 1 : 0;
+}
 
 export function findStage(id: string): Stage | undefined {
   return STAGES.find((s) => s.id === id);

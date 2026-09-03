@@ -5,7 +5,7 @@ import { design } from "./builder.ts";
 import { buildNetlist, validateDesign } from "./netlist.ts";
 import { Simulator } from "./sim.ts";
 import { runSteps, verify } from "./verify.ts";
-import { findStage, STAGES } from "./stages/index.ts";
+import { alu, arith, cond, findStage, logic, STAGES } from "./stages/index.ts";
 import { truthTable } from "./stages/types.ts";
 import { par, REFERENCE_COMPONENTS, REFERENCES } from "./reference.ts";
 import { worldPins } from "./transform.ts";
@@ -66,6 +66,10 @@ Deno.test("reference areas are the pars", () => {
       sub8: undefined,
       register8: undefined,
       counter8: undefined,
+      logic8: undefined,
+      arith8: undefined,
+      alu8: undefined,
+      cond8: undefined,
     },
   );
 });
@@ -360,4 +364,42 @@ Deno.test("components can be renamed and removed only while unused", () => {
   save = removeComponent(save, "xor")!;
   assertEquals(save.best.xor, 15);
   assertEquals(removeComponent(save, "missing"), undefined);
+});
+
+Deno.test("the ALU function tables", () => {
+  assertEquals(logic(0b1100, 0b1010, 0), 0b1000);
+  assertEquals(logic(0b1100, 0b1010, 1), 0b1110);
+  assertEquals(logic(0b1100, 0b1010, 2), 0b0110);
+  assertEquals(logic(0b1100, 0, 3), 0b11110011);
+  assertEquals(arith(255, 1, 0), 0);
+  assertEquals(arith(255, 99, 1), 0);
+  assertEquals(arith(0, 1, 2), 255);
+  assertEquals(arith(0, 99, 3), 255);
+  assertEquals(alu(5, 3, 0, 2, 0, 0), 2);
+  assertEquals(alu(5, 3, 0, 2, 0, 1), 254);
+  assertEquals(alu(5, 3, 0, 1, 1, 0), 1);
+  assertEquals(alu(5, 3, 1, 3, 0, 1), 252);
+  assertEquals(cond(0, 0, 1, 0), 1);
+  assertEquals(cond(0, 1, 0, 1), 0);
+  assertEquals(cond(200, 1, 0, 0), 1);
+  assertEquals(cond(5, 0, 0, 1), 1);
+  assertEquals(cond(5, 1, 1, 0), 0);
+  // Every stage's steps agree with themselves: the expected output is a function of the inputs.
+  for (const stage of STAGES) {
+    assert(stage.steps.length > 0, stage.id);
+    for (const step of stage.steps) {
+      for (const name of Object.keys(step.set)) {
+        assert(
+          stage.inputs.some((p) => p.name === name),
+          `${stage.id}: unknown input ${name}`,
+        );
+      }
+      for (const name of Object.keys(step.expect)) {
+        assert(
+          stage.outputs.some((p) => p.name === name),
+          `${stage.id}: unknown output ${name}`,
+        );
+      }
+    }
+  }
 });
