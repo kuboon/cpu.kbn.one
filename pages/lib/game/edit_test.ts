@@ -24,6 +24,40 @@ Deno.test("connect creates wires and extends them; crossings and parts are left 
   assertEquals(edit.connect(d, library, { x: 0, y: 0 }, { x: 2, y: 0 }), d);
 });
 
+Deno.test("connect towards the margin leaves a stub that reaches a border pin", () => {
+  let d = design(2, 1).input("a", "w", 0).output("out", "e", 0).build();
+  d = edit.connect(d, library, { x: 0, y: 0 }, { x: -1, y: 0 });
+  d = edit.connect(d, library, { x: 0, y: 0 }, { x: 1, y: 0 });
+  d = edit.connect(d, library, { x: 1, y: 0 }, { x: 2, y: 0 });
+  assertEquals(d.cells["0,0"], {
+    kind: "wire",
+    n: false,
+    e: true,
+    s: false,
+    w: true,
+  });
+  assertEquals(d.cells["1,0"], {
+    kind: "wire",
+    n: false,
+    e: true,
+    s: false,
+    w: true,
+  });
+  assertEquals(d.cells["2,0"], undefined);
+  // Both pins now sit on one net, so the "buffer" passes a through.
+  const result = verify(d, library, {
+    inputs: ["a"],
+    outputs: ["out"],
+    steps: [{ set: { a: 1 }, expect: { out: 1 } }, {
+      set: { a: 0 },
+      expect: { out: 0 },
+    }],
+  });
+  assert(result.passed);
+  // Two margin cells never connect.
+  assertEquals(edit.connect(d, library, { x: -1, y: 0 }, { x: -1, y: 1 }), d);
+});
+
 Deno.test("clearCell removes a wire and the stubs pointing at it", () => {
   let d = design(3, 1).wire(0, 0, "e").wire(1, 0, "we").wire(2, 0, "w").build();
   d = edit.clearCell(d, library, { x: 1, y: 0 });

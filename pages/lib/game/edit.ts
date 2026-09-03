@@ -65,7 +65,9 @@ export function placementAt(
 
 /**
  * Joins two neighbouring cells with wire. An empty cell becomes a wire; a wire gains the side; a
- * crossing or a component is left alone (its face is already whatever it is).
+ * crossing or a component is left alone (its face is already whatever it is). One of the two may
+ * lie just outside the board: the cell inside then gets a stub towards the border, which is how
+ * a wire reaches a border pin.
  */
 export function connect(
   design: Design,
@@ -74,12 +76,12 @@ export function connect(
   b: Point,
 ): Design {
   const side = sideBetween(a, b);
-  if (side === undefined || !inBoard(design, a) || !inBoard(design, b)) {
+  if (side === undefined || (!inBoard(design, a) && !inBoard(design, b))) {
     return design;
   }
   const cells = { ...design.cells };
-  extend(design, library, cells, a, side);
-  extend(design, library, cells, b, OPPOSITE[side]);
+  if (inBoard(design, a)) extend(design, library, cells, a, side);
+  if (inBoard(design, b)) extend(design, library, cells, b, OPPOSITE[side]);
   return { ...design, cells };
 }
 

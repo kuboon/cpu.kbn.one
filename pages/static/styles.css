@@ -291,6 +291,31 @@ body:has(.editor) .site-footer {
   pointer-events: none;
 }
 
+.pinname.small {
+  font-size: 6.5px;
+}
+
+.stub {
+  stroke: var(--muted);
+  stroke-width: 3;
+  stroke-dasharray: 3 3;
+  fill: none;
+}
+
+.stub.connected {
+  stroke: var(--wire);
+  stroke-dasharray: none;
+  stroke-width: 4;
+}
+
+.stub.connected.on {
+  stroke: var(--wire-on);
+}
+
+.stub.short {
+  stroke: var(--short);
+}
+
 .pin circle {
   fill: var(--bg);
   stroke: var(--fg);
