@@ -18,7 +18,8 @@ export type SimError =
   | { kind: "unstable" };
 
 export interface EvalResult {
-  outputs: Record<string, Bit>;
+  /** Output pin name -> value; a bus pin's lanes assembled as a number, lane 0 the low bit. */
+  outputs: Record<string, number>;
   /** Every net's value; Z where nothing drives it. */
   nets: NetValue[];
   error?: SimError;
@@ -27,15 +28,15 @@ export interface EvalResult {
 export class Simulator {
   readonly netlist: Netlist;
   #values: NetValue[];
-  #inputs: Record<string, Bit> = {};
+  #inputs: Record<string, number> = {};
 
   constructor(netlist: Netlist) {
     this.netlist = netlist;
     this.#values = new Array(netlist.netCount).fill("z");
   }
 
-  /** Current input levels; unset inputs are 0. */
-  get inputs(): Readonly<Record<string, Bit>> {
+  /** Current input values; unset inputs are 0. */
+  get inputs(): Readonly<Record<string, number>> {
     return this.#inputs;
   }
 
@@ -50,7 +51,7 @@ export class Simulator {
    *
    * @param set Inputs to change; the others keep their level
    */
-  evaluate(set: Record<string, Bit> = {}): EvalResult {
+  evaluate(set: Record<string, number> = {}): EvalResult {
     this.#inputs = { ...this.#inputs, ...set };
     const nl = this.netlist;
     const n = nl.netCount;
@@ -63,9 +64,12 @@ export class Simulator {
       has1.fill(0);
       has0.fill(0);
       for (const net of nl.ones) has1[net] = 1;
-      for (const [name, net] of Object.entries(nl.inputs)) {
-        if ((this.#inputs[name] ?? 0) === 1) has1[net] = 1;
-        else has0[net] = 1;
+      for (const [name, lanes] of Object.entries(nl.inputs)) {
+        const value = this.#inputs[name] ?? 0;
+        lanes.forEach((net, lane) => {
+          if ((value >> lane) & 1) has1[net] = 1;
+          else has0[net] = 1;
+        });
       }
       for (const relay of nl.relays) {
         const control = values[relay.c] === 1 ? 1 : 0;
@@ -105,10 +109,13 @@ export class Simulator {
     };
   }
 
-  #readOutputs(values: NetValue[]): Record<string, Bit> {
-    const outputs: Record<string, Bit> = {};
-    for (const [name, net] of Object.entries(this.netlist.outputs)) {
-      outputs[name] = values[net] === 1 ? 1 : 0;
+  #readOutputs(values: NetValue[]): Record<string, number> {
+    const outputs: Record<string, number> = {};
+    for (const [name, lanes] of Object.entries(this.netlist.outputs)) {
+      outputs[name] = lanes.reduce(
+        (acc, net, lane) => acc | ((values[net] === 1 ? 1 : 0) << lane),
+        0,
+      );
     }
     return outputs;
   }

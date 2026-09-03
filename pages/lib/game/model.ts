@@ -8,6 +8,9 @@
 /** A logic level. */
 export type Bit = 0 | 1;
 
+/** How many lanes a bus carries. The game's word is 8 bits. */
+export const BUS_WIDTH = 8;
+
 /** A side of a cell or of the board, clockwise from north. */
 export type Side = "n" | "e" | "s" | "w";
 
@@ -20,6 +23,8 @@ export interface BorderPin {
   side: Side;
   /** Position along that side, counted from the north-west corner clockwise-independent: x for n/s, y for e/w. */
   index: number;
+  /** Lanes carried: 1 (default) or {@link BUS_WIDTH}. */
+  width?: number;
 }
 
 /** A wire cell: which of its four sides it connects to. Three or four make a junction. */
@@ -29,11 +34,15 @@ export interface WireCell {
   e: boolean;
   s: boolean;
   w: boolean;
+  /** A bus: {@link BUS_WIDTH} lanes in one cell. */
+  bus?: boolean;
 }
 
 /** A crossing: north-south and east-west pass through without touching. */
 export interface CrossCell {
   kind: "cross";
+  busNS?: boolean;
+  busEW?: boolean;
 }
 
 export type Cell = WireCell | CrossCell;
@@ -61,7 +70,7 @@ export interface Design {
   pins: BorderPin[];
 }
 
-export type PrimitiveKind = "relay-on" | "relay-off" | "one";
+export type PrimitiveKind = "relay-on" | "relay-off" | "one" | "split";
 
 /** A component available in the palette: a primitive, or a registered design. */
 export interface ComponentDef {
@@ -134,7 +143,39 @@ export const ONE: ComponentDef = {
   createdAt: "",
 };
 
-export const PRIMITIVES: readonly ComponentDef[] = [RELAY_ON, RELAY_OFF, ONE];
+/**
+ * Fans a bus out into its lanes (or gathers lanes into a bus; it is only wiring). The bus pin is
+ * on the west of the top cell, lane i on the east of cell i.
+ */
+export const SPLIT: ComponentDef = {
+  id: "split",
+  name: "Bus split",
+  stageId: "primitive",
+  width: 1,
+  height: BUS_WIDTH,
+  pins: [
+    { name: "bus", dir: "in", side: "w", index: 0, width: BUS_WIDTH },
+    ...Array.from({ length: BUS_WIDTH }, (_, i) => ({
+      name: `b${i}`,
+      dir: "in" as const,
+      side: "e" as const,
+      index: i,
+    })),
+  ],
+  primitive: "split",
+  createdAt: "",
+};
+
+export const PRIMITIVES: readonly ComponentDef[] = [
+  RELAY_ON,
+  RELAY_OFF,
+  ONE,
+  SPLIT,
+];
+
+export function pinWidth(pin: { width?: number }): number {
+  return pin.width ?? 1;
+}
 
 /** Components by id. Always includes the primitives. */
 export type Library = Map<string, ComponentDef>;

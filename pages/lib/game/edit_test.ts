@@ -46,8 +46,8 @@ Deno.test("connect towards the margin leaves a stub that reaches a border pin", 
   assertEquals(d.cells["2,0"], undefined);
   // Both pins now sit on one net, so the "buffer" passes a through.
   const result = verify(d, library, {
-    inputs: ["a"],
-    outputs: ["out"],
+    inputs: [{ name: "a", width: 1 }],
+    outputs: [{ name: "out", width: 1 }],
     steps: [{ set: { a: 1 }, expect: { out: 1 } }, {
       set: { a: 0 },
       expect: { out: 0 },
@@ -148,4 +148,24 @@ Deno.test("a stage's default design has its pins and is empty", () => {
     "out:co@e1",
   ]);
   assertEquals(verify(d, library, stage).problems, []);
+});
+
+Deno.test("bus drags make bus wires and widen crossings; toggleBus flips a cell", () => {
+  let d = design(3, 1).cross(1, 0).build();
+  d = edit.connect(d, library, { x: 0, y: 0 }, { x: 1, y: 0 }, true);
+  d = edit.connect(d, library, { x: 1, y: 0 }, { x: 2, y: 0 }, true);
+  assertEquals(d.cells["0,0"], {
+    kind: "wire",
+    n: false,
+    e: true,
+    s: false,
+    w: false,
+    bus: true,
+  });
+  assertEquals(d.cells["1,0"], { kind: "cross", busEW: true });
+  // A single-wire drag over a bus keeps the bus.
+  d = edit.connect(d, library, { x: 2, y: 0 }, { x: 1, y: 0 });
+  assertEquals(d.cells["2,0"].kind === "wire" && d.cells["2,0"].bus, true);
+  d = edit.toggleBus(d, { x: 2, y: 0 });
+  assertEquals(d.cells["2,0"].kind === "wire" && d.cells["2,0"].bus, false);
 });

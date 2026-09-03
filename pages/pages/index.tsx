@@ -13,6 +13,12 @@ export const description =
 /** The progress column is the one island on the page. */
 export const islands: readonly string[] = ["progress"];
 
+function specs(pins: readonly { name: string; width: number }[]): string {
+  return pins.map((p) => p.width > 1 ? `${p.name}[${p.width}]` : p.name).join(
+    ", ",
+  );
+}
+
 export default function Home(): RemixNode {
   return (
     <>
@@ -49,8 +55,8 @@ export default function Home(): RemixNode {
                 <br />
                 <small>{stage.description}</small>
               </td>
-              <td>{stage.inputs.join(", ")}</td>
-              <td>{stage.outputs.join(", ")}</td>
+              <td>{specs(stage.inputs)}</td>
+              <td>{specs(stage.outputs)}</td>
               <td>{par(stage.id) ?? "-"}</td>
               <td>
                 <Progress stageId={stage.id} />

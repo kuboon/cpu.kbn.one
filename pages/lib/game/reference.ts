@@ -162,6 +162,12 @@ export const DFF: Design = design(10, 6)
   )
   .build();
 
+/** Negative: split the bus and bring the top lane out. */
+export const NEG8: Design = design(2, 8)
+  .input("a", "w", 0, 8).output("n", "e", 7)
+  .place("split", 0, 0).wire(1, 7, "we")
+  .build();
+
 export const REFERENCES: Readonly<Record<string, Design>> = {
   not: NOT,
   nand: NAND,
@@ -173,6 +179,7 @@ export const REFERENCES: Readonly<Record<string, Design>> = {
   "sr-latch": SR_LATCH,
   "d-latch": D_LATCH,
   dff: DFF,
+  neg8: NEG8,
 };
 
 /** Components the composite references need. */

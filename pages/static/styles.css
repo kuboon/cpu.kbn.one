@@ -219,6 +219,10 @@ body:has(.editor) .site-footer {
   fill: var(--wire);
 }
 
+.wire.bus {
+  stroke-width: 9;
+}
+
 .wire.on {
   stroke: var(--wire-on);
   fill: var(--wire-on);
@@ -293,6 +297,52 @@ body:has(.editor) .site-footer {
 
 .pinname.small {
   font-size: 6.5px;
+}
+
+.pinmark.bus {
+  stroke: var(--bg);
+  stroke-width: 1.5;
+}
+
+.pin.bus circle {
+  stroke-width: 3;
+}
+
+.pin.bus text {
+  font-size: 10px;
+}
+
+.pin .busname {
+  font-size: 7px;
+  font-weight: 600;
+  fill: var(--muted);
+}
+
+.pin.on .busname {
+  fill: var(--muted);
+}
+
+.stub.bus {
+  stroke-width: 5;
+}
+
+.stub.bus.connected {
+  stroke-width: 8;
+}
+
+.part.prim-split rect {
+  fill: color-mix(in srgb, var(--muted) 20%, var(--bg));
+}
+
+.bus-inputs label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.9rem;
+}
+
+.bus-inputs input {
+  width: 4.5rem;
 }
 
 .stub {

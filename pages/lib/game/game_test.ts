@@ -58,8 +58,61 @@ Deno.test("reference areas are the pars", () => {
       "d-latch": 12,
       dff: 60,
       "register-bit": undefined,
+      neg8: 16,
+      zero8: undefined,
+      selector8: undefined,
+      add8: undefined,
+      inc8: undefined,
+      sub8: undefined,
+      register8: undefined,
+      counter8: undefined,
     },
   );
+});
+
+Deno.test("a bus carries eight lanes and a split fans them out", () => {
+  // Bus straight through.
+  const through = design(2, 1).input("a", "w", 0, 8).output("out", "e", 0, 8)
+    .wire(0, 0, "weB").wire(1, 0, "weB").build();
+  const sim = new Simulator(buildNetlist(through, library));
+  assertEquals(sim.evaluate({ a: 0xa5 }).outputs, { out: 0xa5 });
+  assertEquals(sim.evaluate({ a: 3 }).outputs, { out: 3 });
+
+  // Split, swap two lanes with single wires, join again.
+  const swapped = design(4, 8).input("a", "w", 0, 8).output("out", "e", 0, 8)
+    .place("split", 0, 0).place("split", 3, 0, 0, true)
+    .wire(1, 0, "wes").wire(2, 0, "we").wire(1, 1, "wne").wire(2, 1, "we")
+    .build();
+  // lane 0 -> row 0 stays; lane 1 joins lane 0 through (1,1)->(1,0): both outputs read the OR.
+  const s2 = new Simulator(buildNetlist(swapped, library));
+  assertEquals(s2.evaluate({ a: 0b10 }).outputs.out & 0b11, 0b11);
+
+  // A single wire meeting a bus is a width problem, reported on both cells.
+  const mismatch = design(2, 1).input("a", "w", 0, 8).output("out", "e", 0, 8)
+    .wire(0, 0, "weB").wire(1, 0, "we").build();
+  const problems = validateDesign(mismatch, library);
+  assert(
+    problems.some((p) => p.message.includes("幅")),
+    JSON.stringify(problems),
+  );
+  // ...and so is a bus pin fed by a single wire.
+  const narrow = design(1, 1).input("a", "w", 0, 8).output("out", "e", 0).wire(
+    0,
+    0,
+    "we",
+  ).build();
+  assert(validateDesign(narrow, library).some((p) => p.message.includes("幅")));
+});
+
+Deno.test("verify insists on the stage's pin widths", () => {
+  const result = verify(
+    design(1, 1).input("a", "w", 0).output("n", "e", 0).build(),
+    library,
+    findStage("neg8")!,
+  );
+  assertEquals(result.problems.map((p) => p.message), [
+    "入力ピン a は 8 ビットのバスにします",
+  ]);
 });
 
 Deno.test("truth table counts up with the first input as the high bit", () => {
@@ -230,6 +283,14 @@ Deno.test("verify reports missing stage pins instead of simulating", () => {
   assertEquals(result.problems.map((p) => p.message), [
     "入力ピン a がありません",
     "出力ピン out がありません",
+  ]);
+  const wide = verify(
+    design(1, 1).input("a", "n", 0, 8).output("out", "s", 0).build(),
+    library,
+    findStage("not")!,
+  );
+  assertEquals(wide.problems.map((p) => p.message), [
+    "入力ピン a は 1 本にします",
   ]);
 });
 

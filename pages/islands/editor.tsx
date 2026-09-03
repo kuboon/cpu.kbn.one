@@ -3,7 +3,6 @@ import type { Handle, RemixNode } from "@remix-run/ui";
 import { island } from "@kuboon/remix-ssg/client";
 
 import type {
-  Bit,
   Cell,
   ComponentDef,
   Design,
@@ -14,9 +13,11 @@ import type {
 } from "../lib/game/model.ts";
 import {
   area,
+  BUS_WIDTH,
   cellKey,
   createLibrary,
   parseCellKey,
+  pinWidth,
   PRIMITIVES,
 } from "../lib/game/model.ts";
 import { footprint, pinCell, worldPins } from "../lib/game/transform.ts";
@@ -26,7 +27,7 @@ import type { Netlist, Problem } from "../lib/game/netlist.ts";
 import { Simulator } from "../lib/game/sim.ts";
 import type { EvalResult } from "../lib/game/sim.ts";
 import { verify } from "../lib/game/verify.ts";
-import type { Step, StepResult } from "../lib/game/verify.ts";
+import type { PinSpec, StepResult } from "../lib/game/verify.ts";
 import { findStage, STAGES } from "../lib/game/stages/index.ts";
 import type { Stage } from "../lib/game/stages/index.ts";
 import { par } from "../lib/game/reference.ts";
@@ -42,12 +43,13 @@ const CELL = 32;
 type Tool =
   | { kind: "select" }
   | { kind: "wire" }
+  | { kind: "bus" }
   | { kind: "cross" }
   | { kind: "erase" }
   | { kind: "place"; componentId: string };
 
 type Drag =
-  | { kind: "wire"; last: Point }
+  | { kind: "wire"; last: Point; bus: boolean }
   | { kind: "erase" }
   | { kind: "move"; index: number; offset: Point; to?: Point; moved: boolean }
   | { kind: "pin"; index: number; to?: Slot; moved: boolean }
@@ -56,9 +58,12 @@ type Drag =
 const KEY_TOOLS: Record<string, Tool> = {
   v: { kind: "select" },
   w: { kind: "wire" },
+  b: { kind: "bus" },
   x: { kind: "cross" },
   e: { kind: "erase" },
 };
+
+const MAX_BUS = (1 << BUS_WIDTH) - 1;
 
 /**
  * The stage editor: a board, a palette, live simulation and the stage's tests.
@@ -75,7 +80,7 @@ export const Editor = island(
     let library: Library = createLibrary();
     let design: Design = edit.defaultDesign({ inputs: [], outputs: [] });
     let history: Design[] = [];
-    let inputs: Record<string, Bit> = {};
+    let inputs: Record<string, number> = {};
     let tool: Tool = { kind: "wire" };
     let orientation: { rotation: Rotation; mirror: boolean } = {
       rotation: 0,
@@ -88,6 +93,9 @@ export const Editor = island(
     let missing: string | undefined;
     /** Name of the component just registered, for the confirmation. */
     let registered: string | undefined;
+    /** The test step the live simulator currently shows, if any. */
+    let shown: number | undefined;
+    let playing: number | undefined;
 
     // Simulation state, rebuilt after every edit.
     let problems: Problem[] = [];
@@ -151,14 +159,25 @@ export const Editor = island(
       handle.update();
     }
 
-    function setInputs(next: Record<string, Bit>): void {
+    function setInputs(next: Record<string, number>): void {
       inputs = next;
       shown = undefined;
       live = sim?.evaluate(inputs);
       handle.update();
     }
 
-    let playing: number | undefined;
+    /** Replays the test steps up to `index` on the live simulator, so a latch shows its real state. */
+    function showStep(index: number): void {
+      if (stage === undefined || sim === undefined) return;
+      shown = index;
+      sim.reset();
+      inputs = {};
+      for (let i = 0; i <= index; i++) {
+        inputs = { ...inputs, ...stage.steps[i].set };
+        live = sim.evaluate(stage.steps[i].set);
+      }
+      handle.update();
+    }
 
     /** Steps through the tests on the live simulator, one every 600 ms. */
     function play(): void {
@@ -180,22 +199,6 @@ export const Editor = island(
         playing = setTimeout(tick, 600);
       };
       tick();
-    }
-
-    /** Replays the test steps up to `index` on the live simulator, so a latch shows its real state. */
-    /** The test step the live simulator currently shows, if any. */
-    let shown: number | undefined;
-
-    function showStep(index: number): void {
-      if (stage === undefined || sim === undefined) return;
-      shown = index;
-      sim.reset();
-      inputs = {};
-      for (let i = 0; i <= index; i++) {
-        inputs = { ...inputs, ...stage.steps[i].set };
-        live = sim.evaluate(stage.steps[i].set);
-      }
-      handle.update();
     }
 
     function init(): void {
@@ -300,7 +303,8 @@ export const Editor = island(
 
       switch (tool.kind) {
         case "wire":
-          drag = { kind: "wire", last: p };
+        case "bus":
+          drag = { kind: "wire", last: p, bus: tool.kind === "bus" };
           break;
         case "erase":
           drag = { kind: "erase" };
@@ -360,7 +364,7 @@ export const Editor = island(
             const step = last.x !== p.x
               ? { x: last.x + Math.sign(p.x - last.x), y: last.y }
               : { x: last.x, y: last.y + Math.sign(p.y - last.y) };
-            next = edit.connect(next, library, last, step);
+            next = edit.connect(next, library, last, step, drag.bus);
             last = step;
           }
           drag.last = edit.inBoard(design, p) ? p : drag.last;
@@ -381,9 +385,15 @@ export const Editor = island(
           // Dragging from a pin into the board draws a wire from it instead of moving it.
           const pin = design.pins[drag.index];
           const inside = pinCell(design, pin);
-          if (tool.kind === "wire" && p.x === inside.x && p.y === inside.y) {
-            drag = { kind: "wire", last: p };
-            commit(edit.connect(design, library, outsideOf(design, pin), p));
+          if (
+            (tool.kind === "wire" || tool.kind === "bus") && p.x === inside.x &&
+            p.y === inside.y
+          ) {
+            const bus = pinWidth(pin) > 1;
+            drag = { kind: "wire", last: p, bus };
+            commit(
+              edit.connect(design, library, outsideOf(design, pin), p, bus),
+            );
             break;
           }
           drag.moved = true;
@@ -415,7 +425,12 @@ export const Editor = island(
           const pin = design.pins[finished.index];
           if (!finished.moved) {
             if (pin.dir === "in") {
-              setInputs({ ...inputs, [pin.name]: inputs[pin.name] ? 0 : 1 });
+              const width = pinWidth(pin);
+              const current = inputs[pin.name] ?? 0;
+              const next = width === 1
+                ? (current ? 0 : 1)
+                : (current + 1) & MAX_BUS;
+              setInputs({ ...inputs, [pin.name]: next });
             }
           } else if (finished.to !== undefined) {
             commit(
@@ -440,12 +455,17 @@ export const Editor = island(
     const px = (x: number) => (x + 1) * CELL;
     const centre = (x: number) => (x + 1.5) * CELL;
 
-    function netClass(net: number | undefined, base: string): string {
-      if (net === undefined || live === undefined) return base;
-      const value = live.nets[net];
-      const short = live.error?.kind === "short" &&
-        live.error.nets.includes(net);
-      return `${base}${value === 1 ? " on" : ""}${short ? " short" : ""}`;
+    /** CSS classes for something on `lanes`: lit if any lane is 1, red if any is shorted. */
+    function netClass(lanes: number[] | undefined, base: string): string {
+      if (lanes === undefined || live === undefined) return base;
+      const values = live.nets;
+      const on = lanes.some((net) => values[net] === 1);
+      const error = live.error;
+      const short = error?.kind === "short" &&
+        lanes.some((net) => error.nets.includes(net));
+      return `${base}${lanes.length > 1 ? " bus" : ""}${on ? " on" : ""}${
+        short ? " short" : ""
+      }`;
     }
 
     function renderCell(key: string, cell: Cell): RemixNode {
@@ -455,33 +475,23 @@ export const Editor = island(
       const h = CELL / 2;
       const nets = netlist?.cellNets[key];
       if (cell.kind === "cross") {
+        const ns = netClass(
+          nets?.[0],
+          `wire${cell.busNS && !nets ? " bus" : ""}`,
+        );
+        const ew = netClass(
+          nets?.[1],
+          `wire${cell.busEW && !nets ? " bus" : ""}`,
+        );
         return (
           <g key={key}>
-            <line
-              x1={cx}
-              y1={cy - h}
-              x2={cx}
-              y2={cy + h}
-              class={netClass(nets?.[0], "wire")}
-            />
-            <line
-              x1={cx - h}
-              y1={cy}
-              x2={cx - 7}
-              y2={cy}
-              class={netClass(nets?.[1], "wire")}
-            />
-            <line
-              x1={cx + 7}
-              y1={cy}
-              x2={cx + h}
-              y2={cy}
-              class={netClass(nets?.[1], "wire")}
-            />
+            <line x1={cx} y1={cy - h} x2={cx} y2={cy + h} class={ns} />
+            <line x1={cx - h} y1={cy} x2={cx - 8} y2={cy} class={ew} />
+            <line x1={cx + 8} y1={cy} x2={cx + h} y2={cy} class={ew} />
           </g>
         );
       }
-      const cls = netClass(nets?.[0], "wire");
+      const cls = netClass(nets?.[0], `wire${cell.bus && !nets ? " bus" : ""}`);
       const ends: [boolean, number, number][] = [
         [cell.n, cx, cy - h],
         [cell.e, cx + h, cy],
@@ -495,7 +505,14 @@ export const Editor = island(
             <line key={i} x1={cx} y1={cy} x2={x2} y2={y2} class={cls} />
           ))}
           {count !== 2
-            ? <circle cx={cx} cy={cy} r={count === 0 ? 3 : 4.5} class={cls} />
+            ? (
+              <circle
+                cx={cx}
+                cy={cy}
+                r={count === 0 ? 3 : cell.bus ? 6 : 4.5}
+                class={cls}
+              />
+            )
             : null}
         </g>
       );
@@ -503,7 +520,7 @@ export const Editor = island(
 
     function pinMark(
       wp: WorldPin,
-      net: number | undefined,
+      lanes: number[] | undefined,
       showName: boolean,
       small = false,
     ): RemixNode {
@@ -524,20 +541,25 @@ export const Editor = island(
         : wp.side === "w"
         ? [cx - d + 8, cy + 3]
         : [cx + d - 8, cy + 3];
-      const cls = netClass(net, `pinmark ${wp.pin.dir}`);
+      const bus = pinWidth(wp.pin) > 1;
+      const cls = netClass(
+        lanes,
+        `pinmark ${wp.pin.dir}${bus && !lanes ? " bus" : ""}`,
+      );
+      const r = bus ? 5.5 : 3.5;
       return (
         <g key={wp.index}>
           {wp.pin.dir === "in"
             ? (
               <rect
-                x={mx - 3.5}
-                y={my - 3.5}
-                width={7}
-                height={7}
+                x={mx - r}
+                y={my - r}
+                width={2 * r}
+                height={2 * r}
                 class={cls}
               />
             )
-            : <circle cx={mx} cy={my} r={3.5} class={cls} />}
+            : <circle cx={mx} cy={my} r={r} class={cls} />}
           {showName
             ? (
               <text x={tx} y={ty} class={small ? "pinname small" : "pinname"}>
@@ -567,11 +589,12 @@ export const Editor = island(
         : def.name;
       const pins = worldPins(def, placement);
       // A relay's label sits away from its control pin so the two never overlap.
-      const labelOffset = def.primitive === undefined
-        ? 4
-        : pins.find((wp) => wp.pin.name === "c")?.side === "s"
-        ? -6
-        : 12;
+      const labelOffset =
+        def.primitive === undefined || def.primitive === "split"
+          ? 4
+          : pins.find((wp) => wp.pin.name === "c")?.side === "s"
+          ? -6
+          : 12;
       const cls = `part${def.primitive ? ` prim-${def.primitive}` : ""}${
         selected === index && !ghost ? " selected" : ""
       }${
@@ -581,6 +604,7 @@ export const Editor = island(
             : " ghost bad")
           : ""
       }`;
+      const vertical = def.primitive === "split" && height > width;
       return (
         <g key={ghost ? "ghost" : `p${index}`} class={cls}>
           <rect
@@ -593,7 +617,12 @@ export const Editor = island(
           <text
             x={x + width * CELL / 2}
             y={y + height * CELL / 2 + labelOffset}
-            class={def.primitive ? "label small" : "label"}
+            class={def.primitive && def.primitive !== "split"
+              ? "label small"
+              : "label"}
+            transform={vertical
+              ? `rotate(-90 ${x + width * CELL / 2} ${y + height * CELL / 2})`
+              : undefined}
           >
             {label}
           </text>
@@ -605,42 +634,6 @@ export const Editor = island(
               def.primitive !== undefined,
             )
           )}
-        </g>
-      );
-    }
-
-    function renderBorderPin(index: number): RemixNode {
-      const pin = design.pins[index];
-      const at =
-        drag?.kind === "pin" && drag.index === index && drag.to !== undefined
-          ? drag.to
-          : pin;
-      const { x, y } = outsideOf(design, at);
-      const value = pin.dir === "in"
-        ? inputs[pin.name] ?? 0
-        : live?.outputs[pin.name] ?? 0;
-      const net = netlist?.pinNets[index];
-      const short = net !== undefined && live?.error?.kind === "short" &&
-        live.error.nets.includes(net);
-      // The stub between the pin and the board edge: solid once something inside faces the pin.
-      const inside = pinCell(design, at);
-      const dx = x - inside.x;
-      const dy = y - inside.y;
-      const stub = `stub${pinConnected(at) ? " connected" : ""}`;
-      return (
-        <g
-          key={`pin${index}`}
-          class={`pin ${pin.dir}${value ? " on" : ""}${short ? " short" : ""}`}
-        >
-          <line
-            x1={centre(x) - dx * 11}
-            y1={centre(y) - dy * 11}
-            x2={centre(x) - dx * (CELL / 2)}
-            y2={centre(y) - dy * (CELL / 2)}
-            class={netClass(net, stub)}
-          />
-          <circle cx={centre(x)} cy={centre(y)} r={11} />
-          <text x={centre(x)} y={centre(y) + 3.5}>{pin.name}</text>
         </g>
       );
     }
@@ -660,6 +653,66 @@ export const Editor = island(
           wp.x === cell.x && wp.y === cell.y && wp.side === slot.side
         );
       });
+    }
+
+    function renderBorderPin(index: number): RemixNode {
+      const pin = design.pins[index];
+      const at =
+        drag?.kind === "pin" && drag.index === index && drag.to !== undefined
+          ? drag.to
+          : pin;
+      const { x, y } = outsideOf(design, at);
+      const bus = pinWidth(pin) > 1;
+      const value = pin.dir === "in"
+        ? inputs[pin.name] ?? 0
+        : live?.outputs[pin.name] ?? 0;
+      const lanes = netlist?.pinNets[index];
+      const error = live?.error;
+      const short = lanes !== undefined && error?.kind === "short" &&
+        lanes.some((net) => error.nets.includes(net));
+      // The stub between the pin and the board edge: solid once something inside faces the pin.
+      const inside = pinCell(design, at);
+      const dx = x - inside.x;
+      const dy = y - inside.y;
+      const stub = `stub${bus ? " bus" : ""}${
+        pinConnected(at) ? " connected" : ""
+      }`;
+      const cx = centre(x);
+      const cy = centre(y);
+      const r = bus ? 13 : 11;
+      // A bus pin shows its value; its name goes to the outer corner of the margin cell.
+      const [nx, ny] = at.side === "n"
+        ? [cx, cy - 13]
+        : at.side === "s"
+        ? [cx, cy + 15.5]
+        : at.side === "w"
+        ? [cx - 8, cy - 11]
+        : [cx + 8, cy - 11];
+      return (
+        <g
+          key={`pin${index}`}
+          class={`pin ${pin.dir}${bus ? " bus" : ""}${value ? " on" : ""}${
+            short ? " short" : ""
+          }`}
+        >
+          <line
+            x1={cx - dx * r}
+            y1={cy - dy * r}
+            x2={cx - dx * (CELL / 2)}
+            y2={cy - dy * (CELL / 2)}
+            class={netClass(lanes, stub)}
+          />
+          <circle cx={cx} cy={cy} r={r} />
+          {bus
+            ? (
+              <>
+                <text x={cx} y={cy + 3.5}>{value}</text>
+                <text x={nx} y={ny} class="busname">{pin.name}</text>
+              </>
+            )
+            : <text x={cx} y={cy + 3.5}>{pin.name}</text>}
+        </g>
+      );
     }
 
     function renderBoard(): RemixNode {
@@ -761,7 +814,9 @@ export const Editor = island(
     function paletteEntry(def: ComponentDef): RemixNode {
       return toolButton(
         { kind: "place", componentId: def.id },
-        def.primitive ? def.name : `${def.name} (${def.width}×${def.height})`,
+        def.primitive && def.primitive !== "split"
+          ? def.name
+          : `${def.name} (${def.width}×${def.height})`,
       );
     }
 
@@ -787,8 +842,43 @@ export const Editor = island(
       );
     }
 
-    function fmt(bits: Record<string, Bit>): string {
-      return Object.entries(bits).map(([k, v]) => `${k}=${v}`).join(" ");
+    /** Number fields for the bus inputs; single inputs are toggled on the board. */
+    function renderBusInputs(): RemixNode {
+      const buses = stage?.inputs.filter((p) => p.width > 1) ?? [];
+      if (buses.length === 0) return null;
+      return (
+        <div class="group bus-inputs">
+          {buses.map((spec) => (
+            <label key={spec.name}>
+              {spec.name}
+              <input
+                key={`${spec.name}-${inputs[spec.name] ?? 0}`}
+                type="number"
+                min={0}
+                max={MAX_BUS}
+                defaultValue={String(inputs[spec.name] ?? 0)}
+                mix={[on("change", (event) => {
+                  const input = event.currentTarget as HTMLInputElement;
+                  const value = Math.max(
+                    0,
+                    Math.min(MAX_BUS, Math.floor(Number(input.value)) || 0),
+                  );
+                  setInputs({ ...inputs, [spec.name]: value });
+                })]}
+              />
+            </label>
+          ))}
+        </div>
+      );
+    }
+
+    function fmt(values: Record<string, number>): string {
+      return Object.entries(values).map(([k, v]) => `${k}=${v}`).join(" ");
+    }
+
+    function specList(specs: readonly PinSpec[]): string {
+      return specs.map((p) => p.width > 1 ? `${p.name}[${p.width}]` : p.name)
+        .join(", ");
     }
 
     function renderTests(): RemixNode {
@@ -892,11 +982,6 @@ export const Editor = island(
       );
     }
 
-    function renderStep(step: Step): string {
-      return fmt(step.set);
-    }
-    void renderStep;
-
     return () => {
       if (missing !== undefined) {
         return (
@@ -910,25 +995,30 @@ export const Editor = island(
         );
       }
       if (stage === undefined) return <p>読み込み中…</p>;
+      const current = stage;
       const byStage = STAGES
         .map((s) => ({
           stage: s,
           components: save.components.filter((c) => c.stageId === s.id),
         }))
         .filter((g) => g.components.length > 0);
-      const target = par(stage.id);
+      const target = par(current.id);
       return (
         <div class="editor">
           <header class="stage-head">
-            <h1>{stage.title}</h1>
-            <p>{stage.description}</p>
+            <h1>{current.title}</h1>
+            <p>{current.description}</p>
+            <p class="meta">
+              <span>入力 {specList(current.inputs)}</span>
+              <span>出力 {specList(current.outputs)}</span>
+            </p>
             <p class="meta">
               <span>
                 面積 <strong>{area(design)}</strong>
               </span>
               {target !== undefined ? <span>パー {target}</span> : null}
-              {save.best[stage.id] !== undefined
-                ? <span>自己ベスト {save.best[stage.id]}</span>
+              {save.best[current.id] !== undefined
+                ? <span>自己ベスト {save.best[current.id]}</span>
                 : null}
             </p>
           </header>
@@ -939,6 +1029,7 @@ export const Editor = island(
                 <div class="group">
                   {toolButton({ kind: "select" }, "選択 (v)")}
                   {toolButton({ kind: "wire" }, "配線 (w)")}
+                  {toolButton({ kind: "bus" }, "バス (b)")}
                   {toolButton({ kind: "cross" }, "交差 (x)")}
                   {toolButton({ kind: "erase" }, "消去 (e)")}
                 </div>
@@ -986,16 +1077,23 @@ export const Editor = island(
                     type="button"
                     mix={[on("click", () => {
                       selected = undefined;
-                      commit(edit.defaultDesign(stage!));
+                      commit(edit.defaultDesign(current));
                     })]}
                   >
                     盤面を空にする
                   </button>
                 </div>
+                {renderBusInputs()}
                 {message ? <p class="message">{message}</p> : null}
                 <p class="hint">
                   配線ツールで盤面をドラッグすると線が引ける。端のマスから外のピンへ向かってドラッグすると、ピンにつながる。
                   部品の端子（小さな四角が入力、丸が出力）へも同じように引く。端子同士を隣接させれば配線なしでつながる。
+                </p>
+                <p class="hint">
+                  バスは 8 本をまとめた配線で、太く描かれる。1
+                  本の配線とは直接つながらず、Bus split でばらす。
+                  バスの入力ピンはクリックで 1
+                  ずつ増え、上の欄で値を直接入れられる。
                 </p>
                 <p class="hint">
                   入力ピンはクリックで

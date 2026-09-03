@@ -1,19 +1,20 @@
 /**
  * From a board to a flat netlist of relays.
  *
- * Every cell face (a side of a cell) is a node in a union-find. A wire cell joins the faces it
- * connects to; a crossing joins north to south and east to west; touching faces of neighbouring
- * cells are always joined. A placed component's pins attach to the faces they sit on, and a
- * registered component is expanded in place by recursing into its design, so the result contains
- * only relays and constants.
+ * Every cell face (a side of a cell) is a node in a union-find, once per lane: a single wire uses
+ * lane 0, a bus uses all {@link BUS_WIDTH} lanes. A wire cell joins the faces it connects to; a
+ * crossing joins north to south and east to west; touching faces of neighbouring cells are always
+ * joined. A placed component's pins attach to the faces they sit on, and a registered component is
+ * expanded in place by recursing into its design, so the result contains only relays and constants.
  */
 
 import type { ComponentDef, Design, Library, Side } from "./model.ts";
-import { cellKey, parseCellKey } from "./model.ts";
+import { BUS_WIDTH, cellKey, parseCellKey, pinWidth } from "./model.ts";
 import {
   DELTA,
   footprint,
   occupiedCells,
+  OPPOSITE,
   pinCell,
   worldPins,
 } from "./transform.ts";
@@ -33,14 +34,15 @@ export interface Netlist {
   relays: Relay[];
   /** Nets driven by a constant 1. */
   ones: number[];
-  inputs: Record<string, number>;
-  outputs: Record<string, number>;
-  /** Top-level cell -> nets it carries (one for a wire, two for a crossing: north-south, east-west). */
-  cellNets: Record<string, number[]>;
-  /** Top-level border pin index -> net. */
-  pinNets: number[];
-  /** Top-level placement index -> pin index -> net. */
-  placementPinNets: number[][];
+  /** Pin name -> one net per lane. */
+  inputs: Record<string, number[]>;
+  outputs: Record<string, number[]>;
+  /** Top-level cell -> lanes it carries: one list for a wire, two for a crossing (north-south, east-west). */
+  cellNets: Record<string, number[][]>;
+  /** Top-level border pin index -> lanes. */
+  pinNets: number[][];
+  /** Top-level placement index -> pin index -> lanes. */
+  placementPinNets: number[][][];
 }
 
 /** A rule the design breaks, located for the editor. */
@@ -79,6 +81,8 @@ class UnionFind {
     if (ra !== rb) this.#parent[ra] = rb;
   }
 }
+
+const SIDES = ["n", "e", "s", "w"] as const;
 
 /** Checks a design against the placement rules. Empty means it can be simulated. */
 export function validateDesign(design: Design, library: Library): Problem[] {
@@ -154,6 +158,66 @@ export function validateDesign(design: Design, library: Library): Problem[] {
     names.add(pin.name);
   });
 
+  problems.push(...widthProblems(design, library));
+  return problems;
+}
+
+/** Faces where a single wire meets a bus (or a pin of the other width). */
+function widthProblems(design: Design, library: Library): Problem[] {
+  // face key -> the widths declared on it, with the cell each came from
+  const declared = new Map<string, { width: number; x: number; y: number }[]>();
+  const declare = (x: number, y: number, side: Side, width: number) => {
+    const key = `${x},${y}:${side}`;
+    const list = declared.get(key) ?? [];
+    list.push({ width, x, y });
+    declared.set(key, list);
+  };
+
+  for (const [key, cell] of Object.entries(design.cells)) {
+    const { x, y } = parseCellKey(key);
+    if (cell.kind === "wire") {
+      const width = cell.bus ? BUS_WIDTH : 1;
+      for (const side of SIDES) if (cell[side]) declare(x, y, side, width);
+    } else {
+      declare(x, y, "n", cell.busNS ? BUS_WIDTH : 1);
+      declare(x, y, "s", cell.busNS ? BUS_WIDTH : 1);
+      declare(x, y, "e", cell.busEW ? BUS_WIDTH : 1);
+      declare(x, y, "w", cell.busEW ? BUS_WIDTH : 1);
+    }
+  }
+  for (const placement of design.placements) {
+    const def = library.get(placement.componentId);
+    if (def === undefined) continue;
+    for (const wp of worldPins(def, placement)) {
+      declare(wp.x, wp.y, wp.side, pinWidth(wp.pin));
+    }
+  }
+  for (const pin of design.pins) {
+    const { x, y } = pinCell(design, pin);
+    declare(x, y, pin.side, pinWidth(pin));
+  }
+
+  const problems: Problem[] = [];
+  const seen = new Set<string>();
+  const report = (cells: { x: number; y: number }[]) => {
+    const id = cells.map((c) => cellKey(c.x, c.y)).sort().join(";");
+    if (seen.has(id)) return;
+    seen.add(id);
+    problems.push({ message: "配線の幅が合いません（1 本とバス）", cells });
+  };
+
+  for (const [key, list] of declared) {
+    if (new Set(list.map((d) => d.width)).size > 1) report(list);
+    const [cell, side] = key.split(":") as [string, Side];
+    const { x, y } = parseCellKey(cell);
+    const nx = x + DELTA[side].dx;
+    const ny = y + DELTA[side].dy;
+    const facing = declared.get(`${nx},${ny}:${OPPOSITE[side]}`);
+    if (facing === undefined) continue;
+    if (list.some((a) => facing.some((b) => a.width !== b.width))) {
+      report([{ x, y }, { x: nx, y: ny }]);
+    }
+  }
   return problems;
 }
 
@@ -174,17 +238,22 @@ export function buildNetlist(design: Design, library: Library): Netlist {
   }[] = [];
   const ones: string[] = [];
   const stack: string[] = [];
-  const topPlacementPins: string[][] = [];
+  const topPlacementPins: string[][][] = [];
 
-  const face = (prefix: string, x: number, y: number, side: string) =>
-    `${prefix}@${x},${y}:${side}`;
-  const centre = (prefix: string, x: number, y: number) =>
-    `${prefix}@${x},${y}`;
+  const face = (
+    prefix: string,
+    x: number,
+    y: number,
+    side: string,
+    lane: number,
+  ) => `${prefix}@${x},${y}:${side}|${lane}`;
+  const centre = (prefix: string, x: number, y: number, lane: number) =>
+    `${prefix}@${x},${y}|${lane}`;
 
   function flatten(
     d: Design,
     prefix: string,
-    borderKey: (pinIndex: number) => string,
+    borderKey: (pinIndex: number, lane: number) => string,
   ): void {
     const problems = validateDesign(d, library);
     if (problems.length > 0) {
@@ -193,14 +262,22 @@ export function buildNetlist(design: Design, library: Library): Netlist {
       );
     }
 
-    // Touching faces of neighbouring cells.
+    // Touching faces of neighbouring cells, on every lane.
     for (let y = 0; y < d.height; y++) {
       for (let x = 0; x < d.width; x++) {
-        if (x + 1 < d.width) {
-          uf.union(face(prefix, x, y, "e"), face(prefix, x + 1, y, "w"));
-        }
-        if (y + 1 < d.height) {
-          uf.union(face(prefix, x, y, "s"), face(prefix, x, y + 1, "n"));
+        for (let lane = 0; lane < BUS_WIDTH; lane++) {
+          if (x + 1 < d.width) {
+            uf.union(
+              face(prefix, x, y, "e", lane),
+              face(prefix, x + 1, y, "w", lane),
+            );
+          }
+          if (y + 1 < d.height) {
+            uf.union(
+              face(prefix, x, y, "s", lane),
+              face(prefix, x, y + 1, "n", lane),
+            );
+          }
         }
       }
     }
@@ -208,59 +285,94 @@ export function buildNetlist(design: Design, library: Library): Netlist {
     for (const [key, cell] of Object.entries(d.cells)) {
       const { x, y } = parseCellKey(key);
       if (cell.kind === "wire") {
-        for (const side of ["n", "e", "s", "w"] as const) {
-          if (cell[side]) {
-            uf.union(centre(prefix, x, y), face(prefix, x, y, side));
+        const width = cell.bus ? BUS_WIDTH : 1;
+        for (const side of SIDES) {
+          if (!cell[side]) continue;
+          for (let lane = 0; lane < width; lane++) {
+            uf.union(
+              centre(prefix, x, y, lane),
+              face(prefix, x, y, side, lane),
+            );
           }
         }
       } else {
-        uf.union(face(prefix, x, y, "n"), face(prefix, x, y, "s"));
-        uf.union(face(prefix, x, y, "e"), face(prefix, x, y, "w"));
+        for (let lane = 0; lane < (cell.busNS ? BUS_WIDTH : 1); lane++) {
+          uf.union(
+            face(prefix, x, y, "n", lane),
+            face(prefix, x, y, "s", lane),
+          );
+        }
+        for (let lane = 0; lane < (cell.busEW ? BUS_WIDTH : 1); lane++) {
+          uf.union(
+            face(prefix, x, y, "e", lane),
+            face(prefix, x, y, "w", lane),
+          );
+        }
       }
     }
 
     d.pins.forEach((pin, i) => {
       const { x, y } = pinCell(d, pin);
-      uf.union(borderKey(i), face(prefix, x, y, pin.side));
+      for (let lane = 0; lane < pinWidth(pin); lane++) {
+        uf.union(borderKey(i, lane), face(prefix, x, y, pin.side, lane));
+      }
     });
 
     d.placements.forEach((placement, pi) => {
       const def = library.get(placement.componentId) as ComponentDef;
       const path = `${prefix}/${pi}`;
-      const pinKey = (pinIndex: number) => `${path}#${pinIndex}`;
+      const pinKey = (pinIndex: number, lane: number) =>
+        `${path}#${pinIndex}|${lane}`;
       for (const wp of worldPins(def, placement)) {
-        uf.union(pinKey(wp.index), face(prefix, wp.x, wp.y, wp.side));
+        for (let lane = 0; lane < pinWidth(wp.pin); lane++) {
+          uf.union(
+            pinKey(wp.index, lane),
+            face(prefix, wp.x, wp.y, wp.side, lane),
+          );
+        }
       }
       if (prefix === "") {
-        topPlacementPins[pi] = def.pins.map((_, i) => pinKey(i));
+        topPlacementPins[pi] = def.pins.map((pin, i) =>
+          Array.from({ length: pinWidth(pin) }, (_, lane) => pinKey(i, lane))
+        );
       }
-      if (def.primitive === "one") {
-        ones.push(pinKey(0));
-        for (let i = 1; i < def.pins.length; i++) {
-          uf.union(pinKey(0), pinKey(i));
-        }
-      } else if (def.primitive !== undefined) {
-        relays.push({
-          c: pinKey(0),
-          in: pinKey(1),
-          out: pinKey(2),
-          defaultOn: def.primitive === "relay-on",
-          path,
-        });
-      } else if (def.design !== undefined) {
-        if (stack.includes(def.id)) {
-          throw new Error(`部品 ${def.name} が自分自身を含んでいます`);
-        }
-        stack.push(def.id);
-        flatten(def.design, path, pinKey);
-        stack.pop();
-      } else {
-        throw new Error(`部品 ${def.name} には中身がありません`);
+      switch (def.primitive) {
+        case "one":
+          ones.push(pinKey(0, 0));
+          for (let i = 1; i < def.pins.length; i++) {
+            uf.union(pinKey(0, 0), pinKey(i, 0));
+          }
+          break;
+        case "relay-on":
+        case "relay-off":
+          relays.push({
+            c: pinKey(0, 0),
+            in: pinKey(1, 0),
+            out: pinKey(2, 0),
+            defaultOn: def.primitive === "relay-on",
+            path,
+          });
+          break;
+        case "split":
+          for (let lane = 0; lane < BUS_WIDTH; lane++) {
+            uf.union(pinKey(0, lane), pinKey(1 + lane, 0));
+          }
+          break;
+        default:
+          if (def.design === undefined) {
+            throw new Error(`部品 ${def.name} には中身がありません`);
+          }
+          if (stack.includes(def.id)) {
+            throw new Error(`部品 ${def.name} が自分自身を含んでいます`);
+          }
+          stack.push(def.id);
+          flatten(def.design, path, pinKey);
+          stack.pop();
       }
     });
   }
 
-  flatten(design, "", (i) => `#${i}`);
+  flatten(design, "", (i, lane) => `#${i}|${lane}`);
 
   // Number the nets that matter: anything a relay, a constant, a pin or a top-level cell touches.
   const netIds = new Map<number, number>();
@@ -273,21 +385,32 @@ export function buildNetlist(design: Design, library: Library): Netlist {
     }
     return id;
   };
+  const lanesOf = (width: number, key: (lane: number) => string) =>
+    Array.from({ length: width }, (_, lane) => net(key(lane)));
 
-  const inputs: Record<string, number> = {};
-  const outputs: Record<string, number> = {};
+  const inputs: Record<string, number[]> = {};
+  const outputs: Record<string, number[]> = {};
   const pinNets = design.pins.map((pin, i) => {
-    const n = net(`#${i}`);
-    (pin.dir === "in" ? inputs : outputs)[pin.name] = n;
-    return n;
+    const lanes = lanesOf(pinWidth(pin), (lane) => `#${i}|${lane}`);
+    (pin.dir === "in" ? inputs : outputs)[pin.name] = lanes;
+    return lanes;
   });
 
-  const cellNets: Record<string, number[]> = {};
+  const cellNets: Record<string, number[][]> = {};
   for (const [key, cell] of Object.entries(design.cells)) {
     const { x, y } = parseCellKey(key);
     cellNets[key] = cell.kind === "wire"
-      ? [net(centre("", x, y))]
-      : [net(face("", x, y, "n")), net(face("", x, y, "e"))];
+      ? [lanesOf(cell.bus ? BUS_WIDTH : 1, (lane) => centre("", x, y, lane))]
+      : [
+        lanesOf(
+          cell.busNS ? BUS_WIDTH : 1,
+          (lane) => face("", x, y, "n", lane),
+        ),
+        lanesOf(
+          cell.busEW ? BUS_WIDTH : 1,
+          (lane) => face("", x, y, "e", lane),
+        ),
+      ];
   }
 
   return {
@@ -303,7 +426,9 @@ export function buildNetlist(design: Design, library: Library): Netlist {
     outputs,
     cellNets,
     pinNets,
-    placementPinNets: topPlacementPins.map((keys) => keys.map(net)),
+    placementPinNets: topPlacementPins.map((pins) =>
+      pins.map((keys) => keys.map(net))
+    ),
     netCount: netIds.size,
   };
 }

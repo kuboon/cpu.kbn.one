@@ -74,31 +74,59 @@ export function connect(
   library: Library,
   a: Point,
   b: Point,
+  bus = false,
 ): Design {
   const side = sideBetween(a, b);
   if (side === undefined || (!inBoard(design, a) && !inBoard(design, b))) {
     return design;
   }
   const cells = { ...design.cells };
-  if (inBoard(design, a)) extend(design, library, cells, a, side);
-  if (inBoard(design, b)) extend(design, library, cells, b, OPPOSITE[side]);
+  if (inBoard(design, a)) extend(design, library, cells, a, side, bus);
+  if (inBoard(design, b)) {
+    extend(design, library, cells, b, OPPOSITE[side], bus);
+  }
   return { ...design, cells };
 }
 
+/**
+ * Adds a side to the wire at a cell, creating the wire if needed. With `bus` the wire becomes a
+ * bus (a single wire is upgraded, never downgraded), and a crossing gets its axis widened.
+ */
 function extend(
   design: Design,
   library: Library,
   cells: Record<string, Cell>,
   p: Point,
   side: Side,
+  bus: boolean,
 ): void {
   if (placementAt(design, library, p) !== undefined) return;
   const key = cellKey(p.x, p.y);
   const existing = cells[key];
-  if (existing?.kind === "cross") return;
+  if (existing?.kind === "cross") {
+    if (bus) {
+      cells[key] = side === "n" || side === "s"
+        ? { ...existing, busNS: true }
+        : { ...existing, busEW: true };
+    }
+    return;
+  }
   const wire: WireCell = existing ??
     { kind: "wire", n: false, e: false, s: false, w: false };
-  cells[key] = { ...wire, [side]: true };
+  cells[key] = { ...wire, [side]: true, ...(bus ? { bus: true } : {}) };
+}
+
+/** Switches a wire cell between single and bus. */
+export function toggleBus(design: Design, p: Point): Design {
+  const key = cellKey(p.x, p.y);
+  const cell = design.cells[key];
+  if (cell === undefined) return design;
+  const next: Cell = cell.kind === "wire" ? { ...cell, bus: !cell.bus } : {
+    ...cell,
+    busNS: !(cell.busNS || cell.busEW),
+    busEW: !(cell.busNS || cell.busEW),
+  };
+  return { ...design, cells: { ...design.cells, [key]: next } };
 }
 
 /** Removes whatever is at a cell: a wire (and the neighbours' stubs towards it), a crossing, or a component. */
@@ -252,27 +280,29 @@ export function resize(
 
 /** A fresh board for a stage: inputs down the west side, outputs down the east side. */
 export function defaultDesign(
-  stage: { inputs: readonly string[]; outputs: readonly string[] },
+  stage: {
+    inputs: readonly { name: string; width: number }[];
+    outputs: readonly { name: string; width: number }[];
+  },
 ): Design {
   const height = Math.max(3, stage.inputs.length, stage.outputs.length);
+  const pin =
+    (dir: "in" | "out", side: Side) =>
+    (spec: { name: string; width: number }, index: number) => ({
+      name: spec.name,
+      dir,
+      side,
+      index,
+      ...(spec.width === 1 ? {} : { width: spec.width }),
+    });
   return {
     width: 6,
     height,
     cells: {},
     placements: [],
     pins: [
-      ...stage.inputs.map((name, i) => ({
-        name,
-        dir: "in" as const,
-        side: "w" as const,
-        index: i,
-      })),
-      ...stage.outputs.map((name, i) => ({
-        name,
-        dir: "out" as const,
-        side: "e" as const,
-        index: i,
-      })),
+      ...stage.inputs.map(pin("in", "w")),
+      ...stage.outputs.map(pin("out", "e")),
     ],
   };
 }
