@@ -10,6 +10,7 @@ import type {
   Library,
   Placement,
   Rotation,
+  Side,
 } from "../lib/game/model.ts";
 import {
   area,
@@ -18,7 +19,7 @@ import {
   parseCellKey,
   PRIMITIVES,
 } from "../lib/game/model.ts";
-import { footprint, worldPins } from "../lib/game/transform.ts";
+import { footprint, pinCell, worldPins } from "../lib/game/transform.ts";
 import type { WorldPin } from "../lib/game/transform.ts";
 import { outsideOf } from "../lib/game/netlist.ts";
 import type { Netlist, Problem } from "../lib/game/netlist.ts";
@@ -346,11 +347,20 @@ export const Editor = island(
           drag.to = { x: p.x - drag.offset.x, y: p.y - drag.offset.y };
           handle.update();
           break;
-        case "pin":
+        case "pin": {
+          // Dragging from a pin into the board draws a wire from it instead of moving it.
+          const pin = design.pins[drag.index];
+          const inside = pinCell(design, pin);
+          if (tool.kind === "wire" && p.x === inside.x && p.y === inside.y) {
+            drag = { kind: "wire", last: p };
+            commit(edit.connect(design, library, outsideOf(design, pin), p));
+            break;
+          }
           drag.moved = true;
           drag.to = edit.slotAt(design, p);
           handle.update();
           break;
+        }
       }
     }
 
@@ -465,6 +475,7 @@ export const Editor = island(
       wp: WorldPin,
       net: number | undefined,
       showName: boolean,
+      small = false,
     ): RemixNode {
       const cx = centre(wp.x);
       const cy = centre(wp.y);
@@ -477,12 +488,12 @@ export const Editor = island(
         ? [cx - d, cy]
         : [cx + d, cy];
       const [tx, ty] = wp.side === "n"
-        ? [cx, cy - d + 12]
+        ? [cx, cy - d + 11]
         : wp.side === "s"
-        ? [cx, cy + d - 6]
+        ? [cx, cy + d - 5]
         : wp.side === "w"
-        ? [cx - d + 9, cy + 3]
-        : [cx + d - 9, cy + 3];
+        ? [cx - d + 8, cy + 3]
+        : [cx + d - 8, cy + 3];
       const cls = netClass(net, `pinmark ${wp.pin.dir}`);
       return (
         <g key={wp.index}>
@@ -498,7 +509,11 @@ export const Editor = island(
             )
             : <circle cx={mx} cy={my} r={3.5} class={cls} />}
           {showName
-            ? <text x={tx} y={ty} class="pinname">{wp.pin.name}</text>
+            ? (
+              <text x={tx} y={ty} class={small ? "pinname small" : "pinname"}>
+                {wp.pin.name}
+              </text>
+            )
             : null}
         </g>
       );
@@ -525,8 +540,8 @@ export const Editor = island(
       const labelOffset = def.primitive === undefined
         ? 4
         : pins.find((wp) => wp.pin.name === "c")?.side === "s"
-        ? -4
-        : 9;
+        ? -6
+        : 12;
       const cls = `part${def.primitive ? ` prim-${def.primitive}` : ""}${
         selected === index && !ghost ? " selected" : ""
       }${
@@ -556,7 +571,8 @@ export const Editor = island(
             pinMark(
               wp,
               nets?.[wp.index],
-              def.primitive === undefined || wp.pin.name === "c",
+              def.primitive !== "one",
+              def.primitive !== undefined,
             )
           )}
         </g>
@@ -576,15 +592,44 @@ export const Editor = island(
       const net = netlist?.pinNets[index];
       const short = net !== undefined && live?.error?.kind === "short" &&
         live.error.nets.includes(net);
+      // The stub between the pin and the board edge: solid once something inside faces the pin.
+      const inside = pinCell(design, at);
+      const dx = x - inside.x;
+      const dy = y - inside.y;
+      const stub = `stub${pinConnected(at) ? " connected" : ""}`;
       return (
         <g
           key={`pin${index}`}
           class={`pin ${pin.dir}${value ? " on" : ""}${short ? " short" : ""}`}
         >
+          <line
+            x1={centre(x) - dx * 11}
+            y1={centre(y) - dy * 11}
+            x2={centre(x) - dx * (CELL / 2)}
+            y2={centre(y) - dy * (CELL / 2)}
+            class={netClass(net, stub)}
+          />
           <circle cx={centre(x)} cy={centre(y)} r={11} />
           <text x={centre(x)} y={centre(y) + 3.5}>{pin.name}</text>
         </g>
       );
+    }
+
+    /** Whether a wire or a component pin inside the board faces this border slot. */
+    function pinConnected(slot: { side: Side; index: number }): boolean {
+      const cell = pinCell(design, slot);
+      const here = design.cells[cellKey(cell.x, cell.y)];
+      if (here?.kind === "wire" && here[slot.side]) return true;
+      if (here?.kind === "cross") return true;
+      return design.placements.some((p, i) => {
+        const def = library.get(p.componentId);
+        if (
+          def === undefined || edit.placementAt(design, library, cell) !== i
+        ) return false;
+        return worldPins(def, p).some((wp) =>
+          wp.x === cell.x && wp.y === cell.y && wp.side === slot.side
+        );
+      });
     }
 
     function renderBoard(): RemixNode {
@@ -910,7 +955,11 @@ export const Editor = island(
                 </div>
                 {message ? <p class="message">{message}</p> : null}
                 <p class="hint">
-                  入力ピンをクリックで
+                  配線ツールで盤面をドラッグすると線が引ける。端のマスから外のピンへ向かってドラッグすると、ピンにつながる。
+                  部品の端子（小さな四角が入力、丸が出力）へも同じように引く。端子同士を隣接させれば配線なしでつながる。
+                </p>
+                <p class="hint">
+                  入力ピンはクリックで
                   on/off。ピンは外周をドラッグで移動。部品は選択してドラッグで移動、Delete
                   で削除。
                 </p>
