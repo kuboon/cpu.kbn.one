@@ -6,6 +6,19 @@ import { buildNetlist, validateDesign } from "./netlist.ts";
 import { Simulator } from "./sim.ts";
 import { runSteps, verify } from "./verify.ts";
 import { alu, arith, cond, findStage, logic, STAGES } from "./stages/index.ts";
+import {
+  compute,
+  decode,
+  HALT,
+  harness,
+  jmp,
+  ldi,
+  PROGRAM_LOOP,
+  PROGRAM_MEMORY,
+  PROGRAM_SUM,
+  step,
+  STORE,
+} from "./cpu.ts";
 import { truthTable } from "./stages/types.ts";
 import { par, REFERENCE_COMPONENTS, REFERENCES } from "./reference.ts";
 import { worldPins } from "./transform.ts";
@@ -70,6 +83,9 @@ Deno.test("reference areas are the pars", () => {
       arith8: undefined,
       alu8: undefined,
       cond8: undefined,
+      ram4: undefined,
+      control8: undefined,
+      cpu8: undefined,
     },
   );
 });
@@ -402,4 +418,65 @@ Deno.test("the ALU function tables", () => {
       }
     }
   }
+});
+
+Deno.test("the reference CPU runs the test programs", () => {
+  assertEquals(decode(ldi(5)), { ldi: 1, wa: 1, wd: 0, w: 0, jmp: 0, halt: 0 });
+  assertEquals(decode(compute("AD", 0, 0, "D")), {
+    ldi: 0,
+    wa: 0,
+    wd: 1,
+    w: 0,
+    jmp: 0,
+    halt: 0,
+  });
+  assertEquals(decode(compute("DA", 1, 3, "A")), {
+    ldi: 0,
+    wa: 1,
+    wd: 0,
+    w: 0,
+    jmp: 0,
+    halt: 0,
+  });
+  assertEquals(decode(jmp(1, 1, 1)), {
+    ldi: 0,
+    wa: 0,
+    wd: 0,
+    w: 0,
+    jmp: 1,
+    halt: 0,
+  });
+  assertEquals(decode(STORE), { ldi: 0, wa: 0, wd: 0, w: 1, jmp: 0, halt: 0 });
+  assertEquals(decode(HALT), { ldi: 0, wa: 0, wd: 0, w: 0, jmp: 0, halt: 1 });
+
+  const run = (
+    program: readonly number[],
+    memory: Record<number, number> = {},
+  ) => {
+    const mem = new Map(Object.entries(memory).map(([k, v]) => [Number(k), v]));
+    let state = { a: 0, d: 0, pc: 0 };
+    for (let n = 0; n < 100; n++) {
+      const i = program[state.pc] ?? HALT;
+      const m = mem.get(state.a) ?? 0;
+      if (decode(i).w) mem.set(state.a, state.d);
+      const next = step(state, i, m);
+      if (decode(i).halt) break;
+      state = next;
+    }
+    return { state, mem };
+  };
+  const sum = run(PROGRAM_SUM);
+  assertEquals(sum.mem.get(10), 7);
+  const loop = run(PROGRAM_LOOP);
+  assertEquals(loop.state, { a: 2, d: 0, pc: 5 });
+  const memory = run(PROGRAM_MEMORY, { 3: 42 });
+  assertEquals(memory.mem.get(48), 42);
+  assertEquals(memory.state.pc, 255);
+
+  // The harness ends at the halt and checks a write exactly where the program stores.
+  const steps = harness(PROGRAM_SUM);
+  const writes = steps.filter((s) => s.expect.w === 1);
+  assertEquals(writes.length, 1);
+  assertEquals(writes[0].expect.data, 7);
+  assertEquals(steps.at(-1)?.expect.pc, 6);
 });

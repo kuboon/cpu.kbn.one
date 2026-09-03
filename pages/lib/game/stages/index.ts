@@ -6,6 +6,13 @@
 import type { Bit } from "../model.ts";
 import type { Stage } from "./types.ts";
 import { bus, pins, sequence, truthTable, vectors } from "./types.ts";
+import {
+  decode,
+  harness,
+  PROGRAM_LOOP,
+  PROGRAM_MEMORY,
+  PROGRAM_SUM,
+} from "../cpu.ts";
 
 export type { PinSpec, Stage } from "./types.ts";
 
@@ -475,6 +482,76 @@ export const STAGES: readonly Stage[] = [
       { x: 255, lt: 1, eq: 1, gt: 1 },
     ]),
     maxSize: { width: 32, height: 32 },
+  },
+  {
+    id: "ram4",
+    title: "RAM (4 words)",
+    description:
+      "a1 a0 で選んだ番地に、clk の立ち上がりで st が 1 なら in を書き、out にはいつも選んだ番地の値を出す。レジスタ 4 個とセレクタで作る。",
+    inputs: [bus("in"), { name: "a1", width: 1 }, { name: "a0", width: 1 }, {
+      name: "st",
+      width: 1,
+    }, {
+      name: "clk",
+      width: 1,
+    }],
+    outputs: [bus("out")],
+    steps: sequence(
+      [{ in: 11, a1: 0, a0: 0, st: 1, clk: 0 }, { out: 0 }],
+      [{ clk: 1 }, { out: 11 }],
+      [{ clk: 0, a1: 0, a0: 1, in: 22 }, { out: 0 }],
+      [{ clk: 1 }, { out: 22 }],
+      [{ clk: 0, a1: 1, a0: 0, in: 33 }, { out: 0 }],
+      [{ clk: 1 }, { out: 33 }],
+      [{ clk: 0, a1: 1, a0: 1, in: 44 }, { out: 0 }],
+      [{ clk: 1 }, { out: 44 }],
+      [{ clk: 0, st: 0, a1: 0, a0: 0, in: 99 }, { out: 11 }],
+      [{ clk: 1 }, { out: 11 }],
+      [{ clk: 0, a1: 0, a0: 1 }, { out: 22 }],
+      [{ a1: 1, a0: 0 }, { out: 33 }],
+      [{ a1: 1, a0: 1 }, { out: 44 }],
+      [{ st: 1, in: 55 }, { out: 44 }],
+      [{ clk: 1 }, { out: 55 }],
+      [{ clk: 0, a1: 0, a0: 0 }, { out: 11 }],
+    ),
+    maxSize: { width: 96, height: 96 },
+  },
+  {
+    id: "control8",
+    title: "Control unit",
+    description:
+      "命令 i を読んで制御線を出す。ldi は即値、wa と wd は A と D への書き込み、w はメモリ書き込み、jmp は分岐、halt は停止。命令の形式は企画書の 11 章。",
+    inputs: [bus("i")],
+    outputs: pins("ldi", "wa", "wd", "w", "jmp", "halt"),
+    steps: vectors(({ i }) => ({ ...decode(i) }), [
+      { i: 0b00000000 },
+      { i: 0b01111111 },
+      { i: 0b10000000 },
+      { i: 0b10000001 },
+      { i: 0b10111110 },
+      { i: 0b10111111 },
+      { i: 0b11000000 },
+      { i: 0b11011111 },
+      { i: 0b11100000 },
+      { i: 0b11101111 },
+      { i: 0b11110000 },
+      { i: 0b11111111 },
+    ]),
+    maxSize: { width: 32, height: 32 },
+  },
+  {
+    id: "cpu8",
+    title: "CPU",
+    description:
+      "命令 i とメモリの値 m を受け取り、pc と addr（A レジスタ）、メモリ書き込み w とその値 data を出す。レジスタ A、D、PC と ALU、条件判定、制御ユニットで作る。3 本のプログラムがそのまま動けば合格。",
+    inputs: [bus("i"), bus("m"), { name: "clk", width: 1 }],
+    outputs: [bus("pc"), bus("addr"), { name: "w", width: 1 }, bus("data")],
+    steps: [
+      ...harness(PROGRAM_SUM),
+      ...harness(PROGRAM_LOOP),
+      ...harness(PROGRAM_MEMORY, { 3: 42 }),
+    ],
+    maxSize: { width: 128, height: 128 },
   },
 ];
 
