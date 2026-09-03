@@ -55,6 +55,7 @@ export async function renderPage(props: LayoutProps): Promise<string> {
             <Link href={`${base}/blog`}>Blog</Link>
             {/* Showcase: delete this link when you delete the showcase — see README. */}
             <Link href={`${base}/showcase`}>UI showcase</Link>
+            <Link href={`${base}/plan`}>企画書</Link>
           </nav>
         </header>
         <main class="site-main">{props.children}</main>
