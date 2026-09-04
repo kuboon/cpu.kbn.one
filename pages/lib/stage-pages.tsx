@@ -23,7 +23,7 @@ export function stagePages(
     throw new Error('The "editor" island is missing.');
   }
 
-  /** Links to the neighbouring stages and the list. */
+  /** Links to the neighbouring stages. */
   function stageNav(index: number) {
     const previous = STAGES[index - 1];
     const next = STAGES[index + 1];
@@ -38,7 +38,6 @@ export function stagePages(
             )
             : null}
         </span>
-        <Link href={base === "" ? "/" : base}>ステージ一覧</Link>
         <span>
           {next
             ? <Link href={pathOf(next.id)}>{index + 2}. {next.title} →</Link>
