@@ -20,7 +20,12 @@ import {
   pinWidth,
   PRIMITIVES,
 } from "../lib/game/model.ts";
-import { footprint, pinCell, worldPins } from "../lib/game/transform.ts";
+import {
+  footprint,
+  mirrorSymmetric,
+  pinCell,
+  worldPins,
+} from "../lib/game/transform.ts";
 import type { WorldPin } from "../lib/game/transform.ts";
 import { outsideOf } from "../lib/game/netlist.ts";
 import type { Netlist, Problem } from "../lib/game/netlist.ts";
@@ -114,6 +119,10 @@ export const Editor = island(
     let panelOpen = false;
     let tab: Tab = "parts";
     let infoOpen = false;
+    /** The parts placed most recently, newest first; the shortcut row at the top of 部品. */
+    let recent: string[] = [];
+    let sortBy: "area" | "new" = "area";
+    let search = "";
     let drag: Drag | undefined;
     let message: string | undefined;
     let missing: string | undefined;
@@ -295,6 +304,12 @@ export const Editor = island(
       );
     }
 
+    /** Moves a part to the front of the shortcut row, keeping the four most recent. */
+    function remember(componentId: string): void {
+      recent = [componentId, ...recent.filter((id) => id !== componentId)]
+        .slice(0, 4);
+    }
+
     /** Applies an edit: `undefined` means it was refused, and `why` is shown instead. */
     function commit(next: Design | undefined, why?: string): void {
       if (next === undefined) {
@@ -423,7 +438,43 @@ export const Editor = island(
       }
     }
 
+    /**
+     * What 回転 and 反転 would turn: the selected part, else the one about to be placed. Both
+     * the bar over the board and the r / f keys work on it.
+     */
+    function orientTarget():
+      | { def: ComponentDef; placement: Placement; index?: number }
+      | undefined {
+      if (selected !== undefined && tool.kind === "select") {
+        const placement = design.placements[selected];
+        const def = library.get(placement.componentId);
+        return def === undefined
+          ? undefined
+          : { def, placement, index: selected };
+      }
+      if (tool.kind === "place") {
+        const def = library.get(tool.componentId);
+        return def === undefined ? undefined : {
+          def,
+          placement: {
+            componentId: tool.componentId,
+            x: 0,
+            y: 0,
+            ...orientation,
+          },
+        };
+      }
+      return undefined;
+    }
+
     function transform(how: "rotate" | "mirror"): void {
+      // Mirroring a part whose pins map onto themselves changes nothing, so it is not offered.
+      const target = orientTarget();
+      if (
+        how === "mirror" && target !== undefined && mirrorSymmetric(target.def)
+      ) {
+        return;
+      }
       const apply = (o: { rotation: Rotation; mirror: boolean }) =>
         how === "rotate"
           ? { ...o, rotation: ((o.rotation + 1) % 4) as Rotation }
@@ -501,6 +552,7 @@ export const Editor = island(
             break;
           }
           drag = { kind: "idle" };
+          remember(tool.componentId);
           commit(
             edit.addPlacement(design, library, {
               componentId: tool.componentId,
@@ -599,6 +651,7 @@ export const Editor = island(
       switch (finished.kind) {
         case "placing":
           if (hover !== undefined && edit.inBoard(design, hover)) {
+            remember(finished.componentId);
             commit(
               edit.addPlacement(design, library, {
                 componentId: finished.componentId,
@@ -992,31 +1045,180 @@ export const Editor = island(
       );
     }
 
-    function toolButton(t: Tool, label: string): RemixNode {
-      const active = t.kind === tool.kind &&
-        (t.kind !== "place" ||
-          (tool.kind === "place" && tool.componentId === t.componentId));
+    /**
+     * The part's footprint, drawn to scale. Area is the score, so what a card most needs to say
+     * is its shape and its size — XOR 4×3 and XOR 6×2 are one word apart and nothing alike.
+     */
+    function sizeGlyph(def: ComponentDef): RemixNode {
+      const step = clamp(
+        Math.floor(30 / Math.max(def.width, def.height)),
+        3,
+        8,
+      );
+      const w = def.width * step;
+      const h = def.height * step;
+      return (
+        <svg
+          class="size-glyph"
+          width={w + 2}
+          height={h + 2}
+          viewBox={`0 0 ${w + 2} ${h + 2}`}
+          aria-hidden="true"
+        >
+          <rect x="1" y="1" width={w} height={h} rx="1.5" />
+          {Array.from({ length: def.width - 1 }, (_, i) => (
+            <line
+              key={`v${i}`}
+              x1={1 + (i + 1) * step}
+              y1="1"
+              x2={1 + (i + 1) * step}
+              y2={1 + h}
+            />
+          ))}
+          {Array.from({ length: def.height - 1 }, (_, i) => (
+            <line
+              key={`h${i}`}
+              x1="1"
+              y1={1 + (i + 1) * step}
+              x2={1 + w}
+              y2={1 + (i + 1) * step}
+            />
+          ))}
+        </svg>
+      );
+    }
+
+    /** `smallest` marks the tightest build of a function, which is the one worth reaching for. */
+    function partButton(def: ComponentDef, smallest = false): RemixNode {
+      const active = tool.kind === "place" && tool.componentId === def.id;
       return (
         <button
+          key={def.id}
           type="button"
-          class={active ? "active" : ""}
+          class={`part-card${active ? " active" : ""}`}
           mix={[on("click", () => {
-            tool = t;
-            if (t.kind !== "select") selected = undefined;
+            tool = { kind: "place", componentId: def.id };
+            selected = undefined;
             handle.update();
           })]}
         >
-          {label}
+          {sizeGlyph(def)}
+          <span class="text">
+            <span class="name">
+              {def.name}
+              {smallest ? <em>最小</em> : null}
+            </span>
+            <small>
+              {def.width}×{def.height} ・ 面積 {def.width * def.height}
+            </small>
+          </span>
         </button>
       );
     }
 
-    function partButton(def: ComponentDef): RemixNode {
-      return toolButton(
-        { kind: "place", componentId: def.id },
-        def.primitive && def.primitive !== "split"
-          ? def.name
-          : `${def.name} (${def.width}×${def.height})`,
+    /** Area first, so the cheapest build of a function is the one at the top. */
+    function sorted(components: ComponentDef[]): ComponentDef[] {
+      return [...components].sort((a, b) =>
+        sortBy === "new"
+          ? b.createdAt.localeCompare(a.createdAt)
+          : a.width * a.height - b.width * b.height ||
+            a.name.localeCompare(b.name)
+      );
+    }
+
+    function matches(def: ComponentDef): boolean {
+      const q = search.trim().toLowerCase();
+      return q === "" || def.name.toLowerCase().includes(q);
+    }
+
+    function renderParts(): RemixNode {
+      const groups = STAGES
+        .map((s) => {
+          const components = sorted(
+            save.components.filter((c) => c.stageId === s.id && matches(c)),
+          );
+          return {
+            stage: s,
+            components,
+            smallest: Math.min(
+              ...components.map((c) => c.width * c.height),
+            ),
+          };
+        })
+        .filter((g) => g.components.length > 0);
+      const shortcuts = recent
+        .map((id) => library.get(id))
+        .filter((d): d is ComponentDef => d !== undefined);
+      const many = save.components.length > 6;
+      return (
+        <div class="parts">
+          {many
+            ? (
+              <div class="part-search">
+                <input
+                  key="part-search"
+                  type="text"
+                  placeholder="名前で探す"
+                  defaultValue={search}
+                  mix={[on("input", (event) => {
+                    search = (event.currentTarget as HTMLInputElement).value;
+                    handle.update();
+                  })]}
+                />
+                <div class="sort">
+                  <span>並び</span>
+                  {(["area", "new"] as const).map((how) => (
+                    <button
+                      key={how}
+                      type="button"
+                      class={sortBy === how ? "active" : ""}
+                      mix={[on("click", () => {
+                        sortBy = how;
+                        handle.update();
+                      })]}
+                    >
+                      {how === "area" ? "面積の小さい順" : "登録が新しい順"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+            : null}
+          {shortcuts.length > 0
+            ? (
+              <>
+                <span class="group-title">よく使う</span>
+                <div class="part-grid">
+                  {shortcuts.map((def) => partButton(def))}
+                </div>
+              </>
+            )
+            : null}
+          <span class="group-title">素子</span>
+          <div class="part-grid">
+            {PRIMITIVES.filter(matches).map((def) => partButton(def))}
+          </div>
+          {groups.length > 0
+            ? <span class="group-title">ライブラリ</span>
+            : null}
+          {groups.map((g) => (
+            <div key={g.stage.id}>
+              <span class="group-title sub">{g.stage.title}</span>
+              <div class="part-grid">
+                {g.components.map((def) => (
+                  partButton(
+                    def,
+                    g.components.length > 1 &&
+                      def.width * def.height === g.smallest,
+                  )
+                ))}
+              </div>
+            </div>
+          ))}
+          {groups.length === 0 && search.trim() !== ""
+            ? <p class="hint">その名前の部品はありません。</p>
+            : null}
+        </div>
       );
     }
 
@@ -1328,13 +1530,108 @@ export const Editor = island(
       );
     }
 
+    /**
+     * The bar over the board while a part is in hand or selected: which way it is facing, and the
+     * two controls that change it. The glyph is the real footprint with the first pin marked, so
+     * a rotation is visible as a rotation rather than as the word "90°".
+     */
+    function renderOrientBar(): RemixNode {
+      const target = orientTarget();
+      if (target === undefined) return null;
+      const { def, placement } = target;
+      const shape = footprint(def, placement);
+      const first = worldPins(def, { ...placement, x: 0, y: 0 })[0];
+      const step = clamp(
+        Math.floor(26 / Math.max(shape.width, shape.height)),
+        4,
+        9,
+      );
+      const symmetric = mirrorSymmetric(def);
+      return (
+        <div class="orient">
+          <svg
+            class="size-glyph"
+            width={shape.width * step + 2}
+            height={shape.height * step + 2}
+            aria-hidden="true"
+          >
+            {first !== undefined
+              ? (
+                <rect
+                  class="pin-cell"
+                  x={1 + first.x * step}
+                  y={1 + first.y * step}
+                  width={step}
+                  height={step}
+                />
+              )
+              : null}
+            <rect
+              x="1"
+              y="1"
+              width={shape.width * step}
+              height={shape.height * step}
+              rx="1.5"
+            />
+            {Array.from({ length: shape.width - 1 }, (_, i) => (
+              <line
+                key={`v${i}`}
+                x1={1 + (i + 1) * step}
+                y1="1"
+                x2={1 + (i + 1) * step}
+                y2={1 + shape.height * step}
+              />
+            ))}
+            {Array.from({ length: shape.height - 1 }, (_, i) => (
+              <line
+                key={`h${i}`}
+                x1="1"
+                y1={1 + (i + 1) * step}
+                x2={1 + shape.width * step}
+                y2={1 + (i + 1) * step}
+              />
+            ))}
+          </svg>
+          <span class="text">
+            <span class="name">{def.name}</span>
+            <small>
+              {shape.width}×{shape.height} ・ {placement.rotation * 90}°
+              {placement.mirror && !symmetric ? " 反転" : ""}
+            </small>
+          </span>
+          <button
+            type="button"
+            title="回転 (r)"
+            mix={[on("click", () => transform("rotate"))]}
+          >
+            {icon(
+              <>
+                <path d="M20 11a8 8 0 1 0-2.3 6.1" />
+                <path d="M20 4v7h-7" />
+              </>,
+            )}
+          </button>
+          {symmetric ? <span class="symmetric">左右対称</span> : (
+            <button
+              type="button"
+              class={placement.mirror ? "active" : ""}
+              title="反転 (f)"
+              mix={[on("click", () => transform("mirror"))]}
+            >
+              {icon(
+                <>
+                  <path d="M12 3v18" />
+                  <path d="M8 7L3 12l5 5" />
+                  <path d="M16 7l5 5-5 5" />
+                </>,
+              )}
+            </button>
+          )}
+        </div>
+      );
+    }
+
     function renderPanel(current: Stage): RemixNode {
-      const byStage = STAGES
-        .map((s) => ({
-          stage: s,
-          components: save.components.filter((c) => c.stageId === s.id),
-        }))
-        .filter((g) => g.components.length > 0);
       const tabButton = (id: Tab, label: string) => (
         <button
           type="button"
@@ -1367,44 +1664,7 @@ export const Editor = island(
             </button>
           </div>
           <div class="panel-body">
-            {tab === "parts"
-              ? (
-                <div class="toolbar">
-                  <div class="group">
-                    <span class="group-title">素子</span>
-                    {PRIMITIVES.map(partButton)}
-                  </div>
-                  {byStage.length > 0
-                    ? <span class="group-title">ライブラリ</span>
-                    : null}
-                  {byStage.map((g) => (
-                    <div class="group" key={g.stage.id}>
-                      <span class="group-title sub">{g.stage.title}</span>
-                      {g.components.map(partButton)}
-                    </div>
-                  ))}
-                  <div class="group">
-                    <button
-                      type="button"
-                      mix={[on("click", () => transform("rotate"))]}
-                    >
-                      回転 (r)
-                    </button>
-                    <button
-                      type="button"
-                      mix={[on("click", () => transform("mirror"))]}
-                    >
-                      反転 (f)
-                    </button>
-                    <span class="hint">
-                      {orientation.rotation * 90}°{orientation.mirror
-                        ? " 反転"
-                        : ""}
-                    </span>
-                  </div>
-                </div>
-              )
-              : null}
+            {tab === "parts" ? renderParts() : null}
             {tab === "tests"
               ? (
                 <div class="toolbar">
@@ -1563,6 +1823,7 @@ export const Editor = island(
                     )}
                   </button>
                 </div>
+                {renderOrientBar()}
                 {message ? <p class="message">{message}</p> : null}
               </div>
               <div class="status">
