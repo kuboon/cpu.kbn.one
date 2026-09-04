@@ -10,6 +10,7 @@ import { joinBase } from "@kuboon/remix-ssg/site";
 
 import { renderPage, SITE_NAME } from "../layout.tsx";
 import { Editor } from "../islands/editor.tsx";
+import { Link } from "./link.tsx";
 import { STAGES } from "./game/stages/index.ts";
 
 export function stagePages(
@@ -22,12 +23,38 @@ export function stagePages(
     throw new Error('The "editor" island is missing.');
   }
 
+  /** Links to the neighbouring stages and the list. */
+  function stageNav(index: number) {
+    const previous = STAGES[index - 1];
+    const next = STAGES[index + 1];
+    return (
+      <nav class="stage-nav">
+        <span>
+          {previous
+            ? (
+              <Link href={pathOf(previous.id)}>
+                ← {index}. {previous.title}
+              </Link>
+            )
+            : null}
+        </span>
+        <Link href={base === "" ? "/" : base}>ステージ一覧</Link>
+        <span>
+          {next
+            ? <Link href={pathOf(next.id)}>{index + 2}. {next.title} →</Link>
+            : null}
+        </span>
+      </nav>
+    );
+  }
+
   return {
     basePath: joinBase(base, "/play"),
 
     async fetch(request: Request): Promise<Response> {
       const pathname = decodeURIComponent(new URL(request.url).pathname);
-      const stage = STAGES.find((s) => pathOf(s.id) === pathname);
+      const index = STAGES.findIndex((s) => pathOf(s.id) === pathname);
+      const stage = STAGES[index];
       if (stage === undefined) {
         return new Response("Not Found", {
           status: 404,
@@ -39,7 +66,13 @@ export function stagePages(
         description: stage.description,
         base,
         islandUrls: { editor: editorUrl },
-        children: <Editor base={base} stageId={stage.id} />,
+        children: (
+          <>
+            {stageNav(index)}
+            <Editor base={base} stageId={stage.id} />
+            {stageNav(index)}
+          </>
+        ),
       });
       return new Response(body, {
         headers: { "content-type": "text/html; charset=utf-8" },
