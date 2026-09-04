@@ -340,6 +340,14 @@ body:has(.editor) .site-main {
   margin: auto;
 }
 
+/*
+ * The board tab outlines the row along the bottom edge, which is where the sheet sits. Room below
+ * the board lets it scroll clear of the sheet, and revealBoardBottom does the scrolling.
+ */
+.editor.panel-open.tab-board .viewport {
+  padding-bottom: 70vh;
+}
+
 /* Wraps the viewport so the zoom stack and the message float over the board, not over the bars. */
 .stage {
   position: relative;
@@ -620,6 +628,10 @@ body:has(.editor) .site-main {
     display: none;
   }
 
+  .editor.panel-open.tab-board .viewport {
+    padding-bottom: 0;
+  }
+
   .panel .grabber {
     display: none;
   }
@@ -775,6 +787,157 @@ body:has(.editor) .site-main {
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+
+/* ---- the board tab --------------------------------------------------------------------------- */
+
+/* The row and column a − would take. The rule is invisible until you can see what it picks. */
+.doomed {
+  fill: color-mix(in srgb, var(--short, #dc2626) 10%, transparent);
+  stroke: var(--short, #dc2626);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+.size-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 3.25rem;
+}
+
+.size-row .label {
+  flex: 1;
+  font-weight: 600;
+}
+
+.size-row .value {
+  width: 2.5rem;
+  text-align: center;
+  font-size: 1.05rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.size-row .step {
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.size-row .step:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.area-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.6rem 0 0.4rem;
+  border-top: 1px solid var(--border);
+}
+
+.area-row strong {
+  font-size: 1.3rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.area-row em {
+  font-style: normal;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.area-row em.over {
+  color: var(--short, #dc2626);
+}
+
+.area-row em.under {
+  color: #16a34a;
+}
+
+.area-row .spacer {
+  flex: 1;
+}
+
+.area-row small {
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.board-tab .warn {
+  margin: 0.4rem 0;
+  padding: 0.5rem 0.7rem;
+  border: 1px solid var(--short, #dc2626);
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--short, #dc2626) 6%, transparent);
+  font-size: 0.8rem;
+}
+
+.board-tab .compact {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  min-height: 3rem;
+  margin: 0.4rem 0 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.board-tab .compact em {
+  font-style: normal;
+  font-weight: 400;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.board-tab .compact:disabled {
+  border-color: var(--border);
+  background: var(--card);
+  color: var(--muted);
+  cursor: default;
+}
+
+.board-tab .group {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.board-tab .group button {
+  flex: 1;
+  min-height: 3rem;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.board-tab .group button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.board-tab .group button.danger {
+  color: var(--short, #dc2626);
 }
 
 /* ---- the orientation bar --------------------------------------------------------------------- */

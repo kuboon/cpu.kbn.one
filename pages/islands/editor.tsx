@@ -198,6 +198,27 @@ export const Editor = island(
       tab = next;
       panelOpen = true;
       handle.update();
+      if (next === "board") requestAnimationFrame(revealBoardBottom);
+    }
+
+    /**
+     * The board tab draws the doomed row along the bottom edge, which on a phone is exactly where
+     * the sheet sits. Scroll the board clear of it — the viewport gains room below for this.
+     */
+    function revealBoardBottom(): void {
+      const el = viewport();
+      const board = el?.querySelector<SVGElement>("svg.board");
+      const panel = document.querySelector<HTMLElement>(".panel");
+      if (el === null || board === null || board === undefined) return;
+      const covered = panel === null ? 0 : Math.max(
+        0,
+        el.getBoundingClientRect().bottom -
+          panel.getBoundingClientRect().top,
+      );
+      if (covered === 0) return;
+      const bottom = board.getBoundingClientRect().bottom -
+        el.getBoundingClientRect().top + el.scrollTop;
+      el.scrollTop = Math.max(0, bottom - (el.clientHeight - covered) + 12);
     }
 
     function saveDraft(): void {
@@ -968,6 +989,42 @@ export const Editor = island(
       );
     }
 
+    /**
+     * The row and column a − would take, outlined in red while the board tab is open. The rule is
+     * "the far edge if it is empty, else the near one", which is invisible until you can see it.
+     */
+    function renderShrinkPreview(): RemixNode {
+      if (!panelOpen || tab !== "board") return null;
+      const column = edit.shrinkTarget(design, library, "x");
+      const row = edit.shrinkTarget(design, library, "y");
+      return (
+        <>
+          {column !== undefined
+            ? (
+              <rect
+                class="doomed"
+                x={px(column.index)}
+                y={px(0)}
+                width={CELL}
+                height={design.height * CELL}
+              />
+            )
+            : null}
+          {row !== undefined
+            ? (
+              <rect
+                class="doomed"
+                x={px(0)}
+                y={px(row.index)}
+                width={design.width * CELL}
+                height={CELL}
+              />
+            )
+            : null}
+        </>
+      );
+    }
+
     function renderBoard(): RemixNode {
       const w = (design.width + 2) * CELL;
       const h = (design.height + 2) * CELL;
@@ -1035,6 +1092,7 @@ export const Editor = island(
               />
             );
           })}
+          {renderShrinkPreview()}
           {Object.entries(design.cells).map(([key, cell]) =>
             renderCell(key, cell)
           )}
@@ -1222,28 +1280,113 @@ export const Editor = island(
       );
     }
 
-    function sizeInput(which: "width" | "height"): RemixNode {
+    const CANNOT_SHRINK =
+      "端の行と列がどちらも使われています。先に端の配線や部品、ピンをどかしてください";
+
+    function resizeTo(width: number, height: number): void {
+      commit(edit.resize(design, library, width, height), CANNOT_SHRINK);
+    }
+
+    /** 幅 or 高さ: − + and the number, with − off when nothing can go. */
+    function sizeRow(which: "width" | "height"): RemixNode {
+      const axis = which === "width" ? "x" : "y";
       const max = stage?.maxSize[which] ?? 64;
+      const value = design[which];
+      const canShrink = edit.shrinkTarget(design, library, axis) !== undefined;
+      const step = (by: number) =>
+        which === "width"
+          ? resizeTo(clamp(value + by, 1, max), design.height)
+          : resizeTo(design.width, clamp(value + by, 1, max));
       return (
-        <input
-          key={`${which}-${design[which]}`}
-          type="number"
-          min={1}
-          max={max}
-          defaultValue={String(design[which])}
-          mix={[on("change", (event) => {
-            const input = event.currentTarget as HTMLInputElement;
-            const value = Math.min(max, Number(input.value));
-            const next = which === "width"
-              ? edit.resize(design, library, value, design.height)
-              : edit.resize(design, library, design.width, value);
-            if (next === undefined) input.value = String(design[which]);
-            commit(
-              next,
-              "空いている行や列がありません。端の配線や部品、ピンをどかしてください",
-            );
-          })]}
-        />
+        <div class="size-row">
+          <span class="label">{which === "width" ? "幅" : "高さ"}</span>
+          <button
+            type="button"
+            class="step"
+            disabled={!canShrink}
+            title={canShrink ? "1 減らす" : CANNOT_SHRINK}
+            mix={[on("click", () => step(-1))]}
+          >
+            −
+          </button>
+          <span class="value">{value}</span>
+          <button
+            type="button"
+            class="step"
+            disabled={value >= max}
+            title="1 増やす"
+            mix={[on("click", () => step(1))]}
+          >
+            +
+          </button>
+        </div>
+      );
+    }
+
+    function renderBoardTab(current: Stage): RemixNode {
+      const target = par(current.id);
+      const over = target === undefined ? undefined : area(design) - target;
+      const tight = edit.compact(design, library);
+      const stuck = edit.shrinkTarget(design, library, "x") === undefined &&
+        edit.shrinkTarget(design, library, "y") === undefined;
+      return (
+        <div class="board-tab">
+          {sizeRow("width")}
+          {sizeRow("height")}
+          <div class="area-row">
+            <span>面積</span>
+            <strong>{area(design)}</strong>
+            {over !== undefined
+              ? (
+                <em class={over > 0 ? "over" : "under"}>
+                  {over === 0
+                    ? "パーちょうど"
+                    : over > 0
+                    ? `+${over}`
+                    : `${over}`}
+                </em>
+              )
+              : null}
+            <span class="spacer" />
+            {target !== undefined ? <small>パー {target}</small> : null}
+          </div>
+          <p class="hint">
+            面積がそのままスコアです。赤い枠が、次に「−」で消える行と列です。
+          </p>
+          {stuck ? <p class="warn">{CANNOT_SHRINK}</p> : null}
+          <button
+            type="button"
+            class="compact"
+            disabled={tight === undefined}
+            mix={[on("click", () => {
+              commit(tight, CANNOT_SHRINK);
+            })]}
+          >
+            余白を詰める
+            {tight !== undefined
+              ? <em>{tight.width}×{tight.height} にする</em>
+              : <em>余白はありません</em>}
+          </button>
+          <div class="group">
+            <button
+              type="button"
+              disabled={history.length === 0}
+              mix={[on("click", undo)]}
+            >
+              元に戻す (Ctrl+Z)
+            </button>
+            <button
+              type="button"
+              class="danger"
+              mix={[on("click", () => {
+                selected = undefined;
+                commit(edit.defaultDesign(current));
+              })]}
+            >
+              盤面を空にする
+            </button>
+          </div>
+        </div>
       );
     }
 
@@ -1636,10 +1779,7 @@ export const Editor = island(
         <button
           type="button"
           class={tab === id ? "active" : ""}
-          mix={[on("click", () => {
-            tab = id;
-            handle.update();
-          })]}
+          mix={[on("click", () => openPanel(id))]}
         >
           {label}
         </button>
@@ -1674,38 +1814,7 @@ export const Editor = island(
                 </div>
               )
               : null}
-            {tab === "board"
-              ? (
-                <div class="toolbar">
-                  <div class="group">
-                    <label>幅 {sizeInput("width")}</label>
-                    <label>高さ {sizeInput("height")}</label>
-                  </div>
-                  <p class="hint">
-                    面積 {area(design)}{" "}
-                    がそのままスコアです。縮めるときは、空いている行や列から削られます。
-                  </p>
-                  <div class="group">
-                    <button
-                      type="button"
-                      disabled={history.length === 0}
-                      mix={[on("click", undo)]}
-                    >
-                      元に戻す (Ctrl+Z)
-                    </button>
-                    <button
-                      type="button"
-                      mix={[on("click", () => {
-                        selected = undefined;
-                        commit(edit.defaultDesign(current));
-                      })]}
-                    >
-                      盤面を空にする
-                    </button>
-                  </div>
-                </div>
-              )
-              : null}
+            {tab === "board" ? renderBoardTab(current) : null}
           </div>
         </aside>
       );
@@ -1733,7 +1842,9 @@ export const Editor = island(
       const base = handle.props.base;
       const stageHref = (s: Stage) => `${base}/play/${s.id}`;
       return (
-        <div class={`editor${panelOpen ? " panel-open" : ""}`}>
+        <div
+          class={`editor tab-${tab}${panelOpen ? " panel-open" : ""}`}
+        >
           <header class="app-bar">
             <a class="back" href={base || "/"}>
               {icon(<path d="M15 5l-7 7 7 7" />)}
