@@ -24,7 +24,7 @@ export interface LayoutProps {
   children: RemixNode;
 }
 
-export const SITE_NAME = "cpu.kbn.one";
+export const SITE_NAME = "Minimum CPU";
 
 /**
  * Renders a page inside the document shell.
@@ -59,7 +59,7 @@ export async function renderPage(props: LayoutProps): Promise<string> {
           <nav class="site-nav">
             <Link href={home}>ステージ</Link>
             <Link href={`${base}/library`}>ライブラリ</Link>
-            <Link href={`${base}/plan`}>企画書</Link>
+            <Link href={`${base}/how-to-play`}>遊び方</Link>
           </nav>
         </header>
         <main class="site-main">{props.children}</main>

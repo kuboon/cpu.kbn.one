@@ -546,7 +546,7 @@ export const STAGES: readonly Stage[] = [
     id: "control8",
     title: "Control unit",
     description:
-      "命令 i を読んで制御線を出す。ldi は即値、wa と wd は A と D への書き込み、w はメモリ書き込み、jmp は分岐、halt は停止。命令の形式は企画書の 11 章。",
+      "命令 i を読んで制御線を出す。ldi は即値、wa と wd は A と D への書き込み、w はメモリ書き込み、jmp は分岐、halt は停止。命令の形式は「遊び方」にある。",
     inputs: [bus("i")],
     outputs: pins("ldi", "wa", "wd", "w", "jmp", "halt"),
     steps: vectors(({ i }) => ({ ...decode(i) }), [

@@ -40,7 +40,7 @@ pages/
       edit.ts        # editing operations (pure functions over a design)
   pages/
     index.tsx        # home — the stage list
-    plan.md          # the design document
+    how-to-play.md   # the rules, as the player reads them
   islands/
     editor.tsx       # the stage editor: board, palette, live simulation, tests
     progress.tsx     # a stage's best area, from the browser's save

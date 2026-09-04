@@ -1,9 +1,9 @@
-# cpu.kbn.one
+# Minimum CPU
 
 リレーから CPU までを、できるだけ小さい面積で組み上げる 1 人用パズルゲーム。
 [nandgame](https://nandgame.com/) と同じ順でステージが進むが、回路はマス目に置き、作った回路は「作ったときの大きさ」のまま次のステージの部品になる。
 
-ルールと設計は [企画書](./pages/pages/plan.md) にある。
+ルールは [遊び方](./pages/pages/how-to-play.md) にある。
 
 ## 構成
 
