@@ -1,5 +1,6 @@
 import { assert, assertEquals, assertThrows } from "@std/assert";
 
+import type { ComponentDef } from "./model.ts";
 import { createLibrary, RELAY_ON } from "./model.ts";
 import { design } from "./builder.ts";
 import { buildNetlist, validateDesign } from "./netlist.ts";
@@ -23,7 +24,7 @@ import { truthTable } from "./stages/types.ts";
 import { par, REFERENCE_COMPONENTS, REFERENCES } from "./reference.ts";
 import { ACHIEVEMENTS, earned, manifest } from "./achievements.ts";
 import type { SaveData } from "./storage.ts";
-import { worldPins } from "./transform.ts";
+import { mirrorSymmetric, worldPins } from "./transform.ts";
 import {
   componentFrom,
   emptySave,
@@ -202,6 +203,34 @@ Deno.test("worldPins of a relay under every orientation", () => {
   assertEquals(at(3, false), "c:w in:s out:n");
   assertEquals(at(0, true), "c:n in:e out:w");
   assertEquals(at(2, true), "c:s in:w out:e");
+});
+
+Deno.test("mirrorSymmetric spots the components 反転 would leave alone", () => {
+  // A relay's in and out face opposite sides, so mirroring swaps them.
+  assert(!mirrorSymmetric(RELAY_ON));
+  // Both inputs on the north edge, one column apart: mirroring exchanges them, so they move.
+  const acrossTheTop: ComponentDef = {
+    ...RELAY_ON,
+    id: "across",
+    width: 3,
+    height: 1,
+    pins: [
+      { name: "a", dir: "in", side: "n", index: 0 },
+      { name: "b", dir: "in", side: "n", index: 2 },
+    ],
+    primitive: undefined,
+  };
+  assert(!mirrorSymmetric(acrossTheTop));
+  // Everything on the centre column: the mirror maps each pin onto itself.
+  const downTheMiddle: ComponentDef = {
+    ...acrossTheTop,
+    id: "middle",
+    pins: [
+      { name: "a", dir: "in", side: "n", index: 1 },
+      { name: "out", dir: "out", side: "s", index: 1 },
+    ],
+  };
+  assert(mirrorSymmetric(downTheMiddle));
 });
 
 Deno.test("pins touching directly connect without a wire", () => {
