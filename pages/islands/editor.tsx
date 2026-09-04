@@ -56,6 +56,8 @@ type Drag =
   | { kind: "erase" }
   | { kind: "move"; index: number; offset: Point; to?: Point; moved: boolean }
   | { kind: "pin"; index: number; to?: Slot; moved: boolean }
+  /** A touch with the place tool: the ghost follows the finger and the part lands on release. */
+  | { kind: "placing"; componentId: string }
   | { kind: "idle" };
 
 const KEY_TOOLS: Record<string, Tool> = {
@@ -372,7 +374,11 @@ export const Editor = island(
 
     function pointerDown(event: PointerEvent): void {
       if (stage === undefined || event.button !== 0) return;
-      (event.currentTarget as Element).setPointerCapture(event.pointerId);
+      try {
+        (event.currentTarget as Element).setPointerCapture(event.pointerId);
+      } catch {
+        // Synthetic events carry no capturable pointer; nothing depends on the capture.
+      }
       const p = cellOf(event);
       message = undefined;
 
@@ -404,6 +410,13 @@ export const Editor = island(
           commit(edit.setCross(design, library, p));
           break;
         case "place":
+          if (event.pointerType === "touch") {
+            // A finger hides the cell under it, so show the ghost first and place on release.
+            drag = { kind: "placing", componentId: tool.componentId };
+            hover = p;
+            handle.update();
+            break;
+          }
           drag = { kind: "idle" };
           commit(
             edit.addPlacement(design, library, {
@@ -445,6 +458,9 @@ export const Editor = island(
       }
       if (!changedCell) return;
       switch (drag.kind) {
+        case "placing":
+          handle.update();
+          break;
         case "wire": {
           // Walk one cell at a time so a fast drag still leaves a continuous wire.
           let next = design;
@@ -498,6 +514,18 @@ export const Editor = island(
       const finished = drag;
       drag = undefined;
       switch (finished.kind) {
+        case "placing":
+          if (hover !== undefined && edit.inBoard(design, hover)) {
+            commit(
+              edit.addPlacement(design, library, {
+                componentId: finished.componentId,
+                ...hover,
+                ...orientation,
+              }),
+              "そこには置けません",
+            );
+          }
+          break;
         case "move":
           if (finished.moved && finished.to !== undefined) {
             const placement = design.placements[finished.index];
@@ -810,13 +838,13 @@ export const Editor = island(
       const problemCells = new Set(
         problems.flatMap((p) => p.cells ?? []).map((c) => cellKey(c.x, c.y)),
       );
-      const ghost =
-        tool.kind === "place" && hover !== undefined && drag === undefined &&
+      const ghost = tool.kind === "place" && hover !== undefined &&
+          (drag === undefined || drag.kind === "placing") &&
           edit.inBoard(design, hover)
-          ? { componentId: tool.componentId, ...hover, ...orientation }
-          : drag?.kind === "move" && drag.to !== undefined
-          ? { ...design.placements[drag.index], ...drag.to }
-          : undefined;
+        ? { componentId: tool.componentId, ...hover, ...orientation }
+        : drag?.kind === "move" && drag.to !== undefined
+        ? { ...design.placements[drag.index], ...drag.to }
+        : undefined;
       return (
         <svg
           viewBox={`0 0 ${w} ${h}`}
