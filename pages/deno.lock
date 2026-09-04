@@ -2,7 +2,7 @@
   "version": "5",
   "specifiers": {
     "jsr:@deno/loader@0.5": "0.5.0",
-    "jsr:@kuboon/game-center-sdk@0.1": "0.1.0",
+    "jsr:@kuboon/game-center-sdk@0.4": "0.4.0",
     "jsr:@kuboon/md@0.3": "0.3.0",
     "jsr:@kuboon/remix-assets-deno@~0.4.2": "0.4.2",
     "jsr:@kuboon/remix-ssg@*": "0.7.0",
@@ -43,8 +43,8 @@
     "@deno/loader@0.5.0": {
       "integrity": "a6d94408de5e6bacac404f8f6963c8b8cc278cfd1a878aa2f06b34a083d6bfee"
     },
-    "@kuboon/game-center-sdk@0.1.0": {
-      "integrity": "d9dc87cd8983dab3fffaeaae2972a026681c1566e583de69a408d6e3802d3a1b"
+    "@kuboon/game-center-sdk@0.4.0": {
+      "integrity": "9da9a77ab8e25a07aeb0ec70c2ebf9a638db60b4fae0c26407386edbd6bc1390"
     },
     "@kuboon/md@0.3.0": {
       "integrity": "d1cdb4f4bb9f269c78c64ce324483c1c974a93b998aaaea2796eaa8c80940193",
@@ -1117,7 +1117,7 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@kuboon/game-center-sdk@0.1",
+      "jsr:@kuboon/game-center-sdk@0.4",
       "jsr:@kuboon/md@0.3",
       "jsr:@kuboon/remix-ssg@0.7",
       "jsr:@std/assert@^1.0.13",

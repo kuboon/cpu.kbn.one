@@ -2,12 +2,16 @@
  * The game-center connection, browser only.
  *
  * `init` runs on every page so a launch token in the URL fragment is picked up wherever the hub
- * opens the game. Unlocks that the hub could not record come back as claim URLs; the caller shows
- * them as links, never opens them.
+ * opens the game.
+ *
+ * The SDK keeps its own queue of unlocks the hub has not been told about, in `localStorage`. A
+ * player who arrived through the hub has a token and is recorded there and then; anyone else — the
+ * game's own URL, offline, an expired token — has their unlocks queued, and one claim link records
+ * the lot. The link is never opened for them: popup blockers eat an unprompted `window.open`, and a
+ * player should see what is about to be recorded before it is.
  */
 
 import { GameCenter } from "@kuboon/game-center-sdk";
-import type { UnlockResult } from "@kuboon/game-center-sdk";
 
 import { GAME_ID } from "./achievements.ts";
 
@@ -21,8 +25,8 @@ export function gameCenter(): GameCenter | undefined {
 
 export interface UnlockOutcome {
   key: string;
+  /** True when the hub has it. False means it is waiting in the queue. */
   recorded: boolean;
-  claimUrl: string;
 }
 
 /** Unlocks one achievement; never throws. */
@@ -31,19 +35,19 @@ export async function unlock(
   score?: number,
 ): Promise<UnlockOutcome> {
   const gc = gameCenter();
-  const options = score === undefined ? {} : { score };
-  const claimUrl = gc?.claimUrl(key, options) ??
-    `https://ga-cen.kbn.one/claim/@${GAME_ID}/${key}`;
-  if (gc === undefined) return { key, recorded: false, claimUrl };
-  let result: UnlockResult;
+  if (gc === undefined) return { key, recorded: false };
   try {
-    result = await gc.unlock(key, options);
+    const result = await gc.unlock(key, score === undefined ? {} : { score });
+    return { key, recorded: result.recorded };
   } catch {
-    return { key, recorded: false, claimUrl };
+    return { key, recorded: false };
   }
-  return {
-    key,
-    recorded: result.recorded,
-    claimUrl: result.claimUrl ?? claimUrl,
-  };
+}
+
+/** Everything waiting to be recorded, as one link. `undefined` when there is nothing to offer. */
+export function claim(): { url: string; count: number } | undefined {
+  const gc = gameCenter();
+  const url = gc?.claimUrl();
+  if (gc === undefined || url === null || url === undefined) return undefined;
+  return { url, count: gc.pending.length };
 }
