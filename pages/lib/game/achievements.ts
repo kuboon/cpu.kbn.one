@@ -106,7 +106,7 @@ export function manifest(): Record<string, unknown> {
     "$schema": "https://ga-cen.kbn.one/schema/gamecenter.json",
     id: GAME_CENTER_SLUG,
     author: GAME_CENTER_AUTHOR,
-    title: "cpu.kbn.one",
+    title: "Minimum CPU",
     description:
       "リレーから CPU までを、できるだけ小さい面積で組み上げるパズル",
     achievements: ACHIEVEMENTS,
