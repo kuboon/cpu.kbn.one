@@ -1456,6 +1456,16 @@ body:has(.editor) .site-main {
   font-weight: 600;
 }
 
-.achievements ul {
-  padding-left: 1.2rem;
+/* One link records everything waiting, so it is a button, not a list item. */
+.achievements .claim {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.75rem;
+  padding: 0 0.9rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
 }

@@ -44,7 +44,7 @@ import { loadSave, storeSave } from "../lib/game/browser-storage.ts";
 import { componentFrom, emptySave, register } from "../lib/game/storage.ts";
 import type { SaveData } from "../lib/game/storage.ts";
 import { ACHIEVEMENTS, earned } from "../lib/game/achievements.ts";
-import { gameCenter, unlock } from "../lib/game/gamecenter.ts";
+import { claim, gameCenter, unlock } from "../lib/game/gamecenter.ts";
 import type { UnlockOutcome } from "../lib/game/gamecenter.ts";
 
 /** Pixels per cell in the SVG's own coordinates; the drawing scales to its container. */
@@ -267,26 +267,17 @@ export const Editor = island(
       }
     }
 
-    function markClaimed(key: string): void {
-      save = {
-        ...save,
-        achievements: { ...save.achievements, [key]: "recorded" },
-      };
-      storeSave(save);
-      unlocked = unlocked.map((u) =>
-        u.key === key ? { ...u, recorded: true } : u
-      );
-      handle.update();
-    }
-
-    /** Claim links for achievements the hub has not recorded yet, this stage's and older ones. */
+    /**
+     * What was just earned, and one link for everything the hub has not been told about.
+     *
+     * The queue is the SDK's, not ours: a player without a launch token has their unlocks held in
+     * storage, and a single claim link records the lot. So there is one link here however many are
+     * waiting, and it is a link the player presses rather than a window we open.
+     */
     function renderAchievements(): RemixNode {
-      const pending = Object.entries(save.achievements ?? {})
-        .filter(([, state]) => state === "pending")
-        .map(([key]) => key);
+      const waiting = claim();
       const fresh = unlocked.filter((u) => u.recorded);
-      if (pending.length === 0 && fresh.length === 0) return null;
-      const gc = gameCenter();
+      if (waiting === undefined && fresh.length === 0) return null;
       const titleOf = (key: string) =>
         ACHIEVEMENTS.find((a) => a.key === key)?.title ?? key;
       return (
@@ -297,29 +288,23 @@ export const Editor = island(
               🏆 {titleOf(u.key)} を記録しました
             </p>
           ))}
-          {pending.length > 0
+          {waiting !== undefined
             ? (
               <>
                 <p class="hint">
                   記録にはあなたの確認が要ります。リンクを押すと game-center
-                  で記録されます。
+                  でまとめて記録されます。
                 </p>
-                <ul>
-                  {pending.map((key) => (
-                    <li key={key}>
-                      🏆 {titleOf(key)}{" "}
-                      <a
-                        href={unlocked.find((u) => u.key === key)?.claimUrl ??
-                          gc?.claimUrl(key) ?? "#"}
-                        target="_blank"
-                        rel="noopener"
-                        mix={[on("click", () => markClaimed(key))]}
-                      >
-                        記録する
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+                <p>
+                  <a
+                    class="claim"
+                    href={waiting.url}
+                    target="_blank"
+                    rel="noopener"
+                  >
+                    🏆 実績を記録する（{waiting.count}件）
+                  </a>
+                </p>
               </>
             )
             : null}
@@ -408,7 +393,9 @@ export const Editor = island(
         handle.update();
         return;
       }
-      gameCenter();
+      // Starting the SDK picks up a launch token from the URL and sends anything queued. Once
+      // that settles the claim link may have nothing left to offer, so redraw.
+      gameCenter()?.ready.then(() => handle.update());
       save = loadSave() ?? emptySave();
       library = createLibrary(save.components);
       design = save.drafts[stage.id] ?? edit.defaultDesign(stage);
