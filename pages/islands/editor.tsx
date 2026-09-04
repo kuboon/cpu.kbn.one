@@ -70,6 +70,20 @@ const KEY_TOOLS: Record<string, Tool> = {
 
 const MAX_BUS = (1 << BUS_WIDTH) - 1;
 
+/** Zoom bounds, in screen pixels per cell. The low end is for a whole CPU on a phone. */
+const MIN_ZOOM = 10;
+const MAX_ZOOM = 72;
+/** The zoom ladder the + and − buttons step along. */
+const ZOOM_STEP = 1.25;
+/** At or above this width the side panel opens with the page; below it, it starts as a sheet. */
+const WIDE = 1100;
+
+type Tab = "parts" | "tests" | "board";
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(high, Math.max(low, value));
+}
+
 /**
  * The stage editor: a board, a palette, live simulation and the stage's tests.
  *
@@ -93,6 +107,13 @@ export const Editor = island(
     };
     let selected: number | undefined;
     let hover: Point | undefined;
+    /** Screen pixels per cell; undefined until the viewport has been measured. */
+    let zoom: number | undefined;
+    /** Once the player zooms, a window resize stops refitting the board for them. */
+    let zoomedByHand = false;
+    let panelOpen = false;
+    let tab: Tab = "parts";
+    let infoOpen = false;
     let drag: Drag | undefined;
     let message: string | undefined;
     let missing: string | undefined;
@@ -117,6 +138,57 @@ export const Editor = island(
       netlist = result.netlist;
       sim = netlist === undefined ? undefined : new Simulator(netlist);
       live = sim?.evaluate(inputs);
+    }
+
+    function viewport(): HTMLElement | null {
+      return document.querySelector<HTMLElement>(".viewport");
+    }
+
+    /** The zoom that would show the whole board, margin included, inside the viewport. */
+    function fitZoom(): number {
+      const el = viewport();
+      if (el === null) return 32;
+      const wide = el.clientWidth / (design.width + 2);
+      const tall = el.clientHeight / (design.height + 2);
+      return clamp(Math.min(wide, tall), MIN_ZOOM, MAX_ZOOM);
+    }
+
+    function fit(): void {
+      zoom = fitZoom();
+      zoomedByHand = false;
+      handle.update();
+      requestAnimationFrame(centreView);
+    }
+
+    function setZoom(next: number): void {
+      const el = viewport();
+      const before = el === null ? undefined : {
+        x: (el.scrollLeft + el.clientWidth / 2) / (zoom ?? 32),
+        y: (el.scrollTop + el.clientHeight / 2) / (zoom ?? 32),
+      };
+      zoom = clamp(next, MIN_ZOOM, MAX_ZOOM);
+      zoomedByHand = true;
+      handle.update();
+      // Keep whatever was in the middle of the viewport in the middle of it.
+      if (el !== null && before !== undefined) {
+        requestAnimationFrame(() => {
+          el.scrollLeft = before.x * zoom! - el.clientWidth / 2;
+          el.scrollTop = before.y * zoom! - el.clientHeight / 2;
+        });
+      }
+    }
+
+    function centreView(): void {
+      const el = viewport();
+      if (el === null) return;
+      el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+      el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+    }
+
+    function openPanel(next: Tab): void {
+      tab = next;
+      panelOpen = true;
+      handle.update();
     }
 
     function saveDraft(): void {
@@ -302,14 +374,25 @@ export const Editor = island(
       save = loadSave() ?? emptySave();
       library = createLibrary(save.components);
       design = save.drafts[stage.id] ?? edit.defaultDesign(stage);
+      panelOpen = globalThis.matchMedia(`(min-width: ${WIDE}px)`).matches;
       rebuild();
       handle.update();
+      requestAnimationFrame(fit);
+    }
+
+    /** A resize changes what fits, so refit — unless the player has set the zoom themselves. */
+    function onResize(): void {
+      if (zoomedByHand) return;
+      fit();
     }
 
     // Only in the browser: the server render is the placeholder below.
     if (typeof document !== "undefined") {
       setTimeout(init, 0);
       globalThis.addEventListener("keydown", onKey, { signal: handle.signal });
+      globalThis.addEventListener("resize", onResize, {
+        signal: handle.signal,
+      });
     }
 
     function onKey(event: KeyboardEvent): void {
@@ -835,6 +918,7 @@ export const Editor = island(
     function renderBoard(): RemixNode {
       const w = (design.width + 2) * CELL;
       const h = (design.height + 2) * CELL;
+      const scale = (zoom ?? 32) / CELL;
       const problemCells = new Set(
         problems.flatMap((p) => p.cells ?? []).map((c) => cellKey(c.x, c.y)),
       );
@@ -848,9 +932,8 @@ export const Editor = island(
       return (
         <svg
           viewBox={`0 0 ${w} ${h}`}
-          width={w}
-          height={h}
-          style={`max-width:${w * 2}px`}
+          width={Math.round(w * scale)}
+          height={Math.round(h * scale)}
           class={`board tool-${tool.kind}`}
           mix={[
             on("pointerdown", (event) => pointerDown(event as PointerEvent)),
@@ -1102,6 +1185,272 @@ export const Editor = island(
       );
     }
 
+    /** The stage's own explanation, folded away behind the ⓘ in the bar. */
+    function renderInfo(current: Stage): RemixNode {
+      if (!infoOpen) return null;
+      return (
+        <div class="info-panel">
+          <p>{current.description}</p>
+          <p class="meta">
+            <span>入力 {specList(current.inputs)}</span>
+            <span>出力 {specList(current.outputs)}</span>
+          </p>
+          <p class="hint">
+            配線ツールで盤面をドラッグすると線が引けます。端のマスから外のピンへ向かってドラッグすると、ピンにつながります。
+            部品の端子（小さな四角が入力、丸が出力）へも同じように引きます。端子同士を隣接させれば配線なしでつながります。
+          </p>
+          <p class="hint">
+            バスは 8 本をまとめた配線で、太く描かれます。1
+            本の配線とは直接つながらず、Bus split でばらします。
+            バスの入力ピンはクリックで 1
+            ずつ増え、テストのタブで値を直接入れられます。
+          </p>
+          <p class="hint">
+            入力ピンはクリックで
+            on/off。ピンは外周をドラッグで移動。部品は選択してドラッグで移動、Delete
+            で削除。キーは v 選択 / w 配線 / b バス / x 交差 / e 消去 / r 回転 /
+            f 反転。
+          </p>
+        </div>
+      );
+    }
+
+    /** One tool, in the dock on a phone and in the rail on a wide screen — the same element. */
+    function dockButton(t: Tool, label: string, icon: RemixNode): RemixNode {
+      const active = t.kind === tool.kind &&
+        (t.kind !== "place" ||
+          (tool.kind === "place" && tool.componentId === t.componentId));
+      return (
+        <button
+          type="button"
+          class={`dock-button${active ? " active" : ""}`}
+          mix={[on("click", () => {
+            tool = t;
+            if (t.kind !== "select") selected = undefined;
+            handle.update();
+          })]}
+        >
+          {icon}
+          <span>{label}</span>
+        </button>
+      );
+    }
+
+    function icon(path: RemixNode, width = 2): RemixNode {
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          width="22"
+          height="22"
+          fill="none"
+          stroke="currentColor"
+          stroke-width={String(width)}
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          {path}
+        </svg>
+      );
+    }
+
+    function renderTools(): RemixNode {
+      return (
+        <div class="tools">
+          {dockButton(
+            { kind: "select" },
+            "選択",
+            icon(<path d="M5 3l14 8-6 1.6L9.6 19z" />, 1.8),
+          )}
+          {dockButton(
+            { kind: "wire" },
+            "配線",
+            icon(<path d="M3 18h7V6h11" />),
+          )}
+          {dockButton(
+            { kind: "bus" },
+            "バス",
+            icon(<path d="M3 18h7V6h11" />, 4.5),
+          )}
+          {dockButton(
+            { kind: "cross" },
+            "交差",
+            icon(
+              <>
+                <path d="M3 12h18" />
+                <path d="M12 3v5" />
+                <path d="M12 16v5" />
+              </>,
+            ),
+          )}
+          {dockButton(
+            { kind: "erase" },
+            "消去",
+            icon(
+              <>
+                <path d="M6 16l7-7 5 5-4 4H8z" />
+                <path d="M3 20h18" />
+              </>,
+              1.8,
+            ),
+          )}
+          <button
+            type="button"
+            class={`dock-button${tool.kind === "place" ? " active" : ""}`}
+            mix={[on("click", () => openPanel("parts"))]}
+          >
+            {icon(
+              <>
+                <rect x="7" y="7" width="10" height="10" rx="2" />
+                <path d="M12 3v4" />
+                <path d="M12 17v4" />
+                <path d="M3 12h4" />
+                <path d="M17 12h4" />
+              </>,
+              1.8,
+            )}
+            <span>部品</span>
+          </button>
+          <button
+            type="button"
+            class="dock-button undo"
+            disabled={history.length === 0}
+            mix={[on("click", undo)]}
+          >
+            {icon(
+              <>
+                <path d="M9 7L4 12l5 5" />
+                <path d="M4 12h11a5 5 0 0 1 0 10h-3" />
+              </>,
+            )}
+            <span>取消</span>
+          </button>
+        </div>
+      );
+    }
+
+    function renderPanel(current: Stage): RemixNode {
+      const byStage = STAGES
+        .map((s) => ({
+          stage: s,
+          components: save.components.filter((c) => c.stageId === s.id),
+        }))
+        .filter((g) => g.components.length > 0);
+      const tabButton = (id: Tab, label: string) => (
+        <button
+          type="button"
+          class={tab === id ? "active" : ""}
+          mix={[on("click", () => {
+            tab = id;
+            handle.update();
+          })]}
+        >
+          {label}
+        </button>
+      );
+      return (
+        <aside class="panel">
+          <div class="grabber" />
+          <div class="tabs">
+            {tabButton("parts", "部品")}
+            {tabButton("tests", "テスト")}
+            {tabButton("board", "盤面")}
+            <button
+              type="button"
+              class="collapse"
+              title="パネルを畳む"
+              mix={[on("click", () => {
+                panelOpen = false;
+                handle.update();
+              })]}
+            >
+              {icon(<path d="M9 5l7 7-7 7" />)}
+            </button>
+          </div>
+          <div class="panel-body">
+            {tab === "parts"
+              ? (
+                <div class="toolbar">
+                  <div class="group">
+                    <span class="group-title">素子</span>
+                    {PRIMITIVES.map(partButton)}
+                  </div>
+                  {byStage.length > 0
+                    ? <span class="group-title">ライブラリ</span>
+                    : null}
+                  {byStage.map((g) => (
+                    <div class="group" key={g.stage.id}>
+                      <span class="group-title sub">{g.stage.title}</span>
+                      {g.components.map(partButton)}
+                    </div>
+                  ))}
+                  <div class="group">
+                    <button
+                      type="button"
+                      mix={[on("click", () => transform("rotate"))]}
+                    >
+                      回転 (r)
+                    </button>
+                    <button
+                      type="button"
+                      mix={[on("click", () => transform("mirror"))]}
+                    >
+                      反転 (f)
+                    </button>
+                    <span class="hint">
+                      {orientation.rotation * 90}°{orientation.mirror
+                        ? " 反転"
+                        : ""}
+                    </span>
+                  </div>
+                </div>
+              )
+              : null}
+            {tab === "tests"
+              ? (
+                <div class="toolbar">
+                  {renderBusInputs()}
+                  {renderTests()}
+                  {renderAchievements()}
+                </div>
+              )
+              : null}
+            {tab === "board"
+              ? (
+                <div class="toolbar">
+                  <div class="group">
+                    <label>幅 {sizeInput("width")}</label>
+                    <label>高さ {sizeInput("height")}</label>
+                  </div>
+                  <p class="hint">
+                    面積 {area(design)}{" "}
+                    がそのままスコアです。縮めるときは、空いている行や列から削られます。
+                  </p>
+                  <div class="group">
+                    <button
+                      type="button"
+                      disabled={history.length === 0}
+                      mix={[on("click", undo)]}
+                    >
+                      元に戻す (Ctrl+Z)
+                    </button>
+                    <button
+                      type="button"
+                      mix={[on("click", () => {
+                        selected = undefined;
+                        commit(edit.defaultDesign(current));
+                      })]}
+                    >
+                      盤面を空にする
+                    </button>
+                  </div>
+                </div>
+              )
+              : null}
+          </div>
+        </aside>
+      );
+    }
+
     return () => {
       if (missing !== undefined) {
         return (
@@ -1116,119 +1465,141 @@ export const Editor = island(
       }
       if (stage === undefined) return <p>読み込み中…</p>;
       const current = stage;
-      const byStage = STAGES
-        .map((s) => ({
-          stage: s,
-          components: save.components.filter((c) => c.stageId === s.id),
-        }))
-        .filter((g) => g.components.length > 0);
+      const index = STAGES.findIndex((s) => s.id === current.id);
       const target = par(current.id);
+      const passed = tests.filter((t) => t.ok).length;
+      const allPassed = problems.length === 0 && tests.length > 0 &&
+        passed === tests.length;
+      const base = handle.props.base;
+      const stageHref = (s: Stage) => `${base}/play/${s.id}`;
       return (
-        <div class="editor">
-          <header class="stage-head">
-            <h1>{current.title}</h1>
-            <p>{current.description}</p>
-            <p class="meta">
-              <span>入力 {specList(current.inputs)}</span>
-              <span>出力 {specList(current.outputs)}</span>
-            </p>
-            <p class="meta">
-              <span>
-                面積 <strong>{area(design)}</strong>
-              </span>
-              {target !== undefined ? <span>パー {target}</span> : null}
-              {save.best[current.id] !== undefined
-                ? <span>自己ベスト {save.best[current.id]}</span>
+        <div class={`editor${panelOpen ? " panel-open" : ""}`}>
+          <header class="app-bar">
+            <a class="back" href={base || "/"}>
+              {icon(<path d="M15 5l-7 7 7 7" />)}
+              <span>ステージ一覧</span>
+            </a>
+            <div class="who">
+              <h1>{current.title}</h1>
+              <span>{index + 1} / {STAGES.length}</span>
+            </div>
+            <button
+              type="button"
+              class={`info${infoOpen ? " active" : ""}`}
+              title="このステージの説明"
+              mix={[on("click", () => {
+                infoOpen = !infoOpen;
+                handle.update();
+              })]}
+            >
+              {icon(
+                <>
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 11v5" />
+                  <path d="M12 7.6v.1" />
+                </>,
+              )}
+            </button>
+            <span class="spacer" />
+            <span class={`pill result${allPassed ? " pass" : ""}`}>
+              テスト {passed} / {tests.length}
+            </span>
+            <span class="pill">
+              面積 <strong>{area(design)}</strong>
+              {target !== undefined ? <em>/ パー {target}</em> : null}
+            </span>
+            <nav class="stage-jump">
+              {index > 0
+                ? (
+                  <a href={stageHref(STAGES[index - 1])}>
+                    ← {STAGES[index - 1].title}
+                  </a>
+                )
                 : null}
-            </p>
+              {index < STAGES.length - 1
+                ? (
+                  <a href={stageHref(STAGES[index + 1])}>
+                    {STAGES[index + 1].title} →
+                  </a>
+                )
+                : null}
+            </nav>
           </header>
-          <div class="workspace">
-            <div class="board-wrap">{renderBoard()}</div>
-            <aside class="side">
-              <div class="toolbar">
-                <div class="group">
-                  {toolButton({ kind: "select" }, "選択 (v)")}
-                  {toolButton({ kind: "wire" }, "配線 (w)")}
-                  {toolButton({ kind: "bus" }, "バス (b)")}
-                  {toolButton({ kind: "cross" }, "交差 (x)")}
-                  {toolButton({ kind: "erase" }, "消去 (e)")}
+          {renderInfo(current)}
+          <div class="app-body">
+            {renderTools()}
+            <div class="board-col">
+              <div class="stage">
+                <div class="viewport">
+                  {renderBoard()}
                 </div>
-                <div class="group">
-                  <span class="group-title">素子</span>
-                  {PRIMITIVES.map(partButton)}
-                </div>
-                {byStage.length > 0
-                  ? <span class="group-title">ライブラリ</span>
-                  : null}
-                {byStage.map((g) => (
-                  <div class="group" key={g.stage.id}>
-                    <span class="group-title sub">{g.stage.title}</span>
-                    {g.components.map(partButton)}
-                  </div>
-                ))}
-                <div class="group">
+                <div class="zoom">
                   <button
                     type="button"
-                    mix={[on("click", () => transform("rotate"))]}
+                    title="拡大"
+                    mix={[on("click", () => setZoom((zoom ?? 32) * ZOOM_STEP))]}
                   >
-                    回転 (r)
+                    +
                   </button>
                   <button
                     type="button"
-                    mix={[on("click", () => transform("mirror"))]}
+                    title="縮小"
+                    mix={[on("click", () => setZoom((zoom ?? 32) / ZOOM_STEP))]}
                   >
-                    反転 (f)
-                  </button>
-                  <span class="hint">
-                    {orientation.rotation * 90}°{orientation.mirror
-                      ? " 反転"
-                      : ""}
-                  </span>
-                </div>
-                <div class="group">
-                  <label>幅 {sizeInput("width")}</label>
-                  <label>高さ {sizeInput("height")}</label>
-                </div>
-                <div class="group">
-                  <button
-                    type="button"
-                    disabled={history.length === 0}
-                    mix={[on("click", undo)]}
-                  >
-                    元に戻す (Ctrl+Z)
+                    −
                   </button>
                   <button
                     type="button"
-                    mix={[on("click", () => {
-                      selected = undefined;
-                      commit(edit.defaultDesign(current));
-                    })]}
+                    title="全体を表示"
+                    mix={[on("click", fit)]}
                   >
-                    盤面を空にする
+                    {icon(
+                      <>
+                        <path d="M4 9V4h5" />
+                        <path d="M20 9V4h-5" />
+                        <path d="M4 15v5h5" />
+                        <path d="M20 15v5h-5" />
+                      </>,
+                    )}
                   </button>
                 </div>
-                {renderBusInputs()}
                 {message ? <p class="message">{message}</p> : null}
-                <p class="hint">
-                  配線ツールで盤面をドラッグすると線が引ける。端のマスから外のピンへ向かってドラッグすると、ピンにつながる。
-                  部品の端子（小さな四角が入力、丸が出力）へも同じように引く。端子同士を隣接させれば配線なしでつながる。
-                </p>
-                <p class="hint">
-                  バスは 8 本をまとめた配線で、太く描かれる。1
-                  本の配線とは直接つながらず、Bus split でばらす。
-                  バスの入力ピンはクリックで 1
-                  ずつ増え、上の欄で値を直接入れられる。
-                </p>
-                <p class="hint">
-                  入力ピンはクリックで
-                  on/off。ピンは外周をドラッグで移動。部品は選択してドラッグで移動、Delete
-                  で削除。
-                </p>
               </div>
-              {renderTests()}
-              {renderAchievements()}
-            </aside>
+              <div class="status">
+                <span>{design.width} × {design.height} マス</span>
+                <span>1マス {Math.round(zoom ?? 32)}px</span>
+              </div>
+              <button
+                type="button"
+                class={`test-bar${allPassed ? " pass" : ""}`}
+                mix={[on("click", () => openPanel("tests"))]}
+              >
+                <span class="mark">{allPassed ? "✓" : "…"}</span>
+                <span class="count">テスト {passed} / {tests.length}</span>
+                <span class="note">
+                  {problems.length > 0
+                    ? problems[0].message
+                    : allPassed
+                    ? "すべて合格"
+                    : ""}
+                </span>
+                <span class="spacer" />
+                {icon(<path d="M6 15l6-6 6 6" />)}
+              </button>
+            </div>
+            {renderPanel(current)}
           </div>
+          {panelOpen
+            ? (
+              <div
+                class="scrim"
+                mix={[on("click", () => {
+                  panelOpen = false;
+                  handle.update();
+                })]}
+              />
+            )
+            : null}
         </div>
       );
     };

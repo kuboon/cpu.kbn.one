@@ -148,50 +148,501 @@ code {
 
 /* ---- editor ---------------------------------------------------------------------------------- */
 
+/*
+ * The play screen is an app, not a page: it fills the viewport and drops the site chrome, which
+ * the ← in its own bar replaces. One set of elements serves both shapes — on a phone the tools sit
+ * in a dock along the bottom and the panel slides up as a sheet; from 1100px the same tools become
+ * a rail down the left and the same panel stands beside the board.
+ */
 body:has(.editor) .site-header,
-body:has(.editor) .site-main,
 body:has(.editor) .site-footer {
-  max-width: 80rem;
+  display: none;
 }
 
-.stage-head h1 {
-  margin-bottom: 0.25rem;
+body:has(.editor) .site-main {
+  max-width: none;
+  padding: 0;
 }
 
-.stage-head p {
-  margin: 0.25rem 0;
+.editor {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;
 }
 
-.stage-head .meta {
+.app-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0 0.5rem;
+  height: 3.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.app-bar .back {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.app-bar .who {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.app-bar h1 {
+  font-size: 1.1rem;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-bar .who span {
+  font-size: 0.8rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.app-bar .info {
+  flex: none;
+  width: 2.25rem;
+  height: 2.25rem;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  border-radius: 0.4rem;
+}
+
+.app-bar .info.active {
+  color: var(--accent);
+  background: var(--card);
+}
+
+.app-bar .spacer {
+  flex: 1;
+}
+
+.app-bar .pill {
+  flex: none;
+  display: flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.15rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--card);
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.app-bar .pill strong {
+  font-size: 0.95rem;
+  color: var(--fg);
+}
+
+.app-bar .pill em {
+  font-style: normal;
+}
+
+.app-bar .pill.result.pass {
+  color: #16a34a;
+  border-color: #16a34a;
+  background: color-mix(in srgb, #16a34a 8%, transparent);
+  font-weight: 600;
+}
+
+.app-bar .stage-jump {
+  display: flex;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.app-bar .stage-jump a {
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--card);
+  color: var(--fg);
+  text-decoration: none;
+}
+
+/* The bar keeps only what fits on a phone; the rest returns with the width. */
+.app-bar .back span,
+.app-bar .pill.result,
+.app-bar .stage-jump {
+  display: none;
+}
+
+.info-panel {
+  flex: none;
+  max-height: 45%;
+  overflow: auto;
+  padding: 0.5rem 1rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+
+.info-panel p {
+  margin: 0.4rem 0;
+}
+
+.info-panel .meta {
   color: var(--muted);
   display: flex;
   gap: 1rem;
+}
+
+.app-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.board-col {
+  order: 1;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Panning is the browser's own scrolling, so it keeps its momentum and its trackpad gestures. */
+.viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--card);
+  display: grid;
+  overscroll-behavior: contain;
+}
+
+/* Centres the board while it is smaller than the viewport, without clipping it once it is not. */
+.viewport .board {
+  margin: auto;
+}
+
+/* Wraps the viewport so the zoom stack and the message float over the board, not over the bars. */
+.stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+
+.zoom {
+  position: absolute;
+  right: 0.75rem;
+  bottom: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.zoom button {
+  width: 2.75rem;
+  height: 2.75rem;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.zoom button:last-child {
+  border-bottom: none;
+}
+
+.status {
+  display: none;
+  flex: none;
+  gap: 1rem;
+  align-items: center;
+  height: 2.25rem;
+  padding: 0 1rem;
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.test-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  height: 3rem;
+  padding: 0 1rem;
+  border: none;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.test-bar .mark {
+  display: grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--bg);
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.test-bar.pass .mark {
+  background: #16a34a;
+}
+
+.test-bar .count {
+  font-weight: 600;
+}
+
+.test-bar .note {
+  font-size: 0.8rem;
+  color: var(--muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.test-bar.pass .note {
+  color: #16a34a;
+}
+
+.test-bar .spacer {
+  flex: 1;
+}
+
+.tools {
+  order: 2;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  padding: 0.5rem 0.6rem calc(0.5rem + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.dock-button {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 3.5rem;
+  height: 3.5rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.6rem;
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+  font-size: 0.625rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.dock-button.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.dock-button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* The dock is full at six tools already; undo lives on the rail and on Ctrl+Z. */
+.dock-button.undo {
+  display: none;
+}
+
+.panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 2;
+  max-height: 70%;
+  display: none;
+  flex-direction: column;
+  background: var(--bg);
+  border-top: 1px solid var(--border);
+  border-radius: 1rem 1rem 0 0;
+  box-shadow: 0 -8px 32px rgb(31 41 55 / 18%);
+}
+
+.editor.panel-open .panel {
+  display: flex;
+}
+
+.scrim {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background: rgb(31 41 55 / 32%);
+}
+
+.panel .grabber {
+  flex: none;
+  width: 2.5rem;
+  height: 4px;
+  margin: 0.5rem auto 0.25rem;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.panel .tabs {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.panel .tabs button {
+  flex: 1;
+  height: 2.75rem;
+  border: none;
+  border-radius: 0.6rem;
+  background: var(--card);
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.panel .tabs button.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.panel .tabs .collapse {
+  flex: none;
+  width: 2.25rem;
+  background: none;
+  color: var(--muted);
+  display: none;
+  place-items: center;
+}
+
+.panel-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.75rem 1rem 1.5rem;
+}
+
+@media (min-width: 1100px) {
+  .app-bar .back span,
+  .app-bar .pill.result,
+  .app-bar .stage-jump {
+    display: flex;
+  }
+
+  .app-body {
+    flex-direction: row;
+  }
+
+  .tools {
+    order: 0;
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: center;
+    width: 4.75rem;
+    padding: 0.75rem 0;
+    gap: 0.4rem;
+    border-top: none;
+    border-right: 1px solid var(--border);
+  }
+
+  .dock-button.undo {
+    display: flex;
+    margin-top: auto;
+  }
+
+  .status {
+    display: flex;
+  }
+
+  .test-bar {
+    display: none;
+  }
+
+  .panel {
+    order: 3;
+    position: static;
+    display: flex;
+    width: 21rem;
+    max-height: none;
+    border-top: none;
+    border-left: 1px solid var(--border);
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .editor:not(.panel-open) .panel {
+    display: none;
+  }
+
+  .panel .grabber {
+    display: none;
+  }
+
+  .panel .tabs {
+    padding: 0.6rem 0.5rem 0.6rem 0.75rem;
+  }
+
+  .panel .tabs .collapse {
+    display: grid;
+  }
+
+  .scrim {
+    display: none;
+  }
 }
 
 .part .label.small {
   font-size: 9px;
 }
 
-.workspace {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 22rem;
-  gap: 1.5rem;
-  align-items: start;
-}
-
-@media (max-width: 60rem) {
-  .workspace {
-    grid-template-columns: 1fr;
-  }
-}
-
-.board-wrap {
-  overflow-x: auto;
-}
-
 .board {
-  width: 100%;
-  height: auto;
+  display: block;
   touch-action: none;
   user-select: none;
   --wire: var(--fg);
@@ -645,20 +1096,4 @@ body:has(.editor) .site-footer {
 
 .achievements ul {
   padding-left: 1.2rem;
-}
-
-.stage-nav {
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.5rem 0;
-  font-size: 0.95rem;
-}
-
-.stage-nav span {
-  flex: 1;
-}
-
-.stage-nav span:last-child {
-  text-align: right;
 }

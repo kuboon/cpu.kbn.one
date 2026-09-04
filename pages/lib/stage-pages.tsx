@@ -10,7 +10,6 @@ import { joinBase } from "@kuboon/remix-ssg/site";
 
 import { renderPage, SITE_NAME } from "../layout.tsx";
 import { Editor } from "../islands/editor.tsx";
-import { Link } from "./link.tsx";
 import { STAGES } from "./game/stages/index.ts";
 
 export function stagePages(
@@ -21,30 +20,6 @@ export function stagePages(
   const editorUrl = context.islandUrls.editor;
   if (editorUrl === undefined) {
     throw new Error('The "editor" island is missing.');
-  }
-
-  /** Links to the neighbouring stages. */
-  function stageNav(index: number) {
-    const previous = STAGES[index - 1];
-    const next = STAGES[index + 1];
-    return (
-      <nav class="stage-nav">
-        <span>
-          {previous
-            ? (
-              <Link href={pathOf(previous.id)}>
-                ← {index}. {previous.title}
-              </Link>
-            )
-            : null}
-        </span>
-        <span>
-          {next
-            ? <Link href={pathOf(next.id)}>{index + 2}. {next.title} →</Link>
-            : null}
-        </span>
-      </nav>
-    );
   }
 
   return {
@@ -65,13 +40,9 @@ export function stagePages(
         description: stage.description,
         base,
         islandUrls: { editor: editorUrl },
-        children: (
-          <>
-            {stageNav(index)}
-            <Editor base={base} stageId={stage.id} />
-            {stageNav(index)}
-          </>
-        ),
+        // The editor fills the viewport and carries its own bar, links to the neighbouring
+        // stages included, so the page adds no chrome of its own.
+        children: <Editor base={base} stageId={stage.id} />,
       });
       return new Response(body, {
         headers: { "content-type": "text/html; charset=utf-8" },
