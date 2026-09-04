@@ -4,7 +4,7 @@ import { createLibrary } from "./model.ts";
 import { design } from "./builder.ts";
 import * as edit from "./edit.ts";
 import { verify } from "./verify.ts";
-import { findStage } from "./stages/index.ts";
+import { findStage, STAGES } from "./stages/index.ts";
 
 const library = createLibrary();
 
@@ -186,6 +186,27 @@ Deno.test("a stage's default design has its pins and is empty", () => {
     "out:co@e1",
   ]);
   assertEquals(verify(d, library, stage).problems, []);
+  assertEquals([d.width, d.height], [12, 8]);
+  // A stage without an initial size falls back to the smallest board that holds its pins.
+  const bare = edit.defaultDesign({
+    inputs: stage.inputs,
+    outputs: stage.outputs,
+  });
+  assertEquals([bare.width, bare.height], [6, 3]);
+});
+
+Deno.test("every stage starts within its maximum and with room for its pins", () => {
+  for (const stage of STAGES) {
+    const d = edit.defaultDesign(stage);
+    assert(
+      d.width <= stage.maxSize.width && d.height <= stage.maxSize.height,
+      stage.id,
+    );
+    assert(
+      d.height >= Math.max(stage.inputs.length, stage.outputs.length),
+      stage.id,
+    );
+  }
 });
 
 Deno.test("bus drags make bus wires and widen crossings; toggleBus flips a cell", () => {

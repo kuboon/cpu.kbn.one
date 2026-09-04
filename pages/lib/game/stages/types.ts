@@ -13,6 +13,8 @@ export interface Stage {
   outputs: readonly PinSpec[];
   steps: readonly Step[];
   maxSize: { width: number; height: number };
+  /** The board a player starts with; they resize from there. */
+  initialSize: { width: number; height: number };
 }
 
 /** Single-bit pins. */

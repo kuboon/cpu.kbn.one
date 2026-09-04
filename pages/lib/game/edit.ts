@@ -325,14 +325,24 @@ function shift(design: Design, axis: "x" | "y", by: number): Design {
   };
 }
 
-/** A fresh board for a stage: inputs down the west side, outputs down the east side. */
+/**
+ * A fresh board for a stage: the stage's initial size (grown if its pins need more), inputs down
+ * the west side, outputs down the east side.
+ */
 export function defaultDesign(
   stage: {
     inputs: readonly { name: string; width: number }[];
     outputs: readonly { name: string; width: number }[];
+    initialSize?: { width: number; height: number };
   },
 ): Design {
-  const height = Math.max(3, stage.inputs.length, stage.outputs.length);
+  const height = Math.max(
+    stage.initialSize?.height ?? 3,
+    3,
+    stage.inputs.length,
+    stage.outputs.length,
+  );
+  const width = Math.max(stage.initialSize?.width ?? 6, 3);
   const pin =
     (dir: "in" | "out", side: Side) =>
     (spec: { name: string; width: number }, index: number) => ({
@@ -343,7 +353,7 @@ export function defaultDesign(
       ...(spec.width === 1 ? {} : { width: spec.width }),
     });
   return {
-    width: 6,
+    width,
     height,
     cells: {},
     placements: [],
