@@ -6,7 +6,7 @@ import { STAGES } from "../lib/game/stages/index.ts";
 import { par } from "../lib/game/reference.ts";
 import { Progress } from "../islands/progress.tsx";
 
-export const title = "cpu.kbn.one";
+export const title = "Minimum CPU";
 export const description =
   "リレーから CPU までを、できるだけ小さい面積で組み上げるパズルゲーム。";
 
@@ -29,7 +29,7 @@ export default function Home(): RemixNode {
         スコアは盤面の面積。小さいほどよい。
       </p>
       <p>
-        ルールと設計は<Link href={`${base}/plan`}>企画書</Link>にある。
+        ルールは<Link href={`${base}/how-to-play`}>遊び方</Link>にある。
         ステージ名を押すとエディタが開く。進み具合はこのブラウザに保存される。
       </p>
       <h2>ステージ</h2>
