@@ -228,3 +228,63 @@ Deno.test("bus drags make bus wires and widen crossings; toggleBus flips a cell"
   d = edit.toggleBus(d, { x: 2, y: 0 });
   assertEquals(d.cells["2,0"].kind === "wire" && d.cells["2,0"].bus, false);
 });
+
+Deno.test("shrinkTarget names the row or column the next shrink would take", () => {
+  // Six wide, but only the first three columns hold anything: the far edge goes first.
+  const d = design(6, 3).input("a", "w", 0).output("out", "e", 0)
+    .place("relay-on", 1, 1).build();
+  assertEquals(edit.shrinkTarget(d, library, "x"), {
+    index: 5,
+    shifts: false,
+  });
+  assertEquals(edit.shrinkTarget(d, library, "y"), {
+    index: 2,
+    shifts: false,
+  });
+});
+
+Deno.test("shrinkTarget falls back to the near edge, then refuses", () => {
+  // Column 0 is empty, column 2 holds the relay: the board shifts left instead.
+  const wide = design(3, 1).place("relay-on", 2, 0).build();
+  assertEquals(edit.shrinkTarget(wide, library, "x"), {
+    index: 0,
+    shifts: true,
+  });
+  // Both edges are taken, so there is nothing to remove.
+  const full = design(3, 1).place("relay-on", 0, 0).place("relay-on", 2, 0)
+    .build();
+  assertEquals(edit.shrinkTarget(full, library, "x"), undefined);
+  // A one-wide board can never give up its only column.
+  assertEquals(
+    edit.shrinkTarget(design(1, 1).build(), library, "x"),
+    undefined,
+  );
+});
+
+Deno.test("compact trims the margin off all four edges and keeps the contents put", () => {
+  const d = design(8, 6).place("relay-on", 2, 1).place("relay-off", 4, 3)
+    .build();
+  const tight = edit.compact(d, library);
+  assert(tight !== undefined);
+  assertEquals({ width: tight.width, height: tight.height }, {
+    width: 3,
+    height: 3,
+  });
+  assertEquals(
+    tight.placements.map((p) => ({ x: p.x, y: p.y })),
+    [{ x: 0, y: 0 }, { x: 2, y: 2 }],
+  );
+  // Nothing left to take, so a second pass reports no change.
+  assertEquals(edit.compact(tight, library), undefined);
+});
+
+Deno.test("compact keeps the rows and columns a border pin sits on", () => {
+  // The pins sit at y 0 and y 3, so those rows stay even though the board is otherwise empty.
+  const d = design(5, 4).input("a", "w", 0).output("out", "e", 3).build();
+  const tight = edit.compact(d, library);
+  assert(tight !== undefined);
+  assertEquals({ width: tight.width, height: tight.height }, {
+    width: 1,
+    height: 4,
+  });
+});

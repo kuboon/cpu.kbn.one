@@ -275,13 +275,15 @@ export function resize(
   return { ...next, width, height };
 }
 
-/** Removes one empty column (`axis` x) or row (`axis` y), from the far edge if it is empty, else from the near edge. */
-function shrink(
+/**
+ * The columns (`axis` x) or rows (`axis` y) that hold something: a cell, a component, or a border
+ * pin running along that axis. `undefined` when a placement names a component the library lacks.
+ */
+export function usedTracks(
   design: Design,
   library: Library,
   axis: "x" | "y",
-): Design | undefined {
-  const size = axis === "x" ? design.width : design.height;
+): Set<number> | undefined {
   const used = new Set<number>();
   for (const key of Object.keys(design.cells)) {
     used.add(parseCellKey(key)[axis]);
@@ -295,13 +297,67 @@ function shrink(
     const along = pin.side === "n" || pin.side === "s" ? "x" : "y";
     if (along === axis) used.add(pin.index);
   }
-  if (!used.has(size - 1)) {
+  return used;
+}
+
+/** The column or row the next shrink along `axis` would remove, and whether the rest shifts onto it. */
+export interface ShrinkTarget {
+  index: number;
+  shifts: boolean;
+}
+
+/**
+ * Which column or row a one-step shrink would take: the far edge when it is empty, else the near
+ * edge (which shifts everything). `undefined` when neither edge is free, so nothing can go.
+ */
+export function shrinkTarget(
+  design: Design,
+  library: Library,
+  axis: "x" | "y",
+): ShrinkTarget | undefined {
+  const size = axis === "x" ? design.width : design.height;
+  if (size <= 1) return undefined;
+  const used = usedTracks(design, library, axis);
+  if (used === undefined) return undefined;
+  if (!used.has(size - 1)) return { index: size - 1, shifts: false };
+  if (!used.has(0)) return { index: 0, shifts: true };
+  return undefined;
+}
+
+/** Removes one empty column (`axis` x) or row (`axis` y), from the far edge if it is empty, else from the near edge. */
+function shrink(
+  design: Design,
+  library: Library,
+  axis: "x" | "y",
+): Design | undefined {
+  const target = shrinkTarget(design, library, axis);
+  if (target === undefined) return undefined;
+  if (!target.shifts) {
+    const size = axis === "x" ? design.width : design.height;
     return axis === "x"
       ? { ...design, width: size - 1 }
       : { ...design, height: size - 1 };
   }
-  if (!used.has(0)) return shift(design, axis, -1);
-  return undefined;
+  return shift(design, axis, -1);
+}
+
+/**
+ * Trims every empty row and column off all four edges, leaving the smallest board that still holds
+ * everything. `undefined` when there is no margin to take.
+ */
+export function compact(
+  design: Design,
+  library: Library,
+): Design | undefined {
+  let next = design;
+  for (;;) {
+    const narrower = shrink(next, library, "x");
+    if (narrower !== undefined) next = narrower;
+    const shorter = shrink(next, library, "y");
+    if (shorter !== undefined) next = shorter;
+    if (narrower === undefined && shorter === undefined) break;
+  }
+  return next === design ? undefined : next;
 }
 
 /** Moves every cell, component and edge pin along an axis. */

@@ -2,6 +2,8 @@ import { on } from "@remix-run/ui";
 import type { Handle, RemixNode } from "@remix-run/ui";
 import { island } from "@kuboon/remix-ssg/client";
 
+import { Link } from "../lib/link.tsx";
+
 import type {
   Cell,
   ComponentDef,
@@ -20,7 +22,12 @@ import {
   pinWidth,
   PRIMITIVES,
 } from "../lib/game/model.ts";
-import { footprint, pinCell, worldPins } from "../lib/game/transform.ts";
+import {
+  footprint,
+  mirrorSymmetric,
+  pinCell,
+  worldPins,
+} from "../lib/game/transform.ts";
 import type { WorldPin } from "../lib/game/transform.ts";
 import { outsideOf } from "../lib/game/netlist.ts";
 import type { Netlist, Problem } from "../lib/game/netlist.ts";
@@ -70,6 +77,20 @@ const KEY_TOOLS: Record<string, Tool> = {
 
 const MAX_BUS = (1 << BUS_WIDTH) - 1;
 
+/** Zoom bounds, in screen pixels per cell. The low end is for a whole CPU on a phone. */
+const MIN_ZOOM = 10;
+const MAX_ZOOM = 72;
+/** The zoom ladder the + and − buttons step along. */
+const ZOOM_STEP = 1.25;
+/** At or above this width the side panel opens with the page; below it, it starts as a sheet. */
+const WIDE = 1100;
+
+type Tab = "parts" | "tests" | "board";
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(high, Math.max(low, value));
+}
+
 /**
  * The stage editor: a board, a palette, live simulation and the stage's tests.
  *
@@ -93,6 +114,17 @@ export const Editor = island(
     };
     let selected: number | undefined;
     let hover: Point | undefined;
+    /** Screen pixels per cell; undefined until the viewport has been measured. */
+    let zoom: number | undefined;
+    /** Once the player zooms, a window resize stops refitting the board for them. */
+    let zoomedByHand = false;
+    let panelOpen = false;
+    let tab: Tab = "parts";
+    let infoOpen = false;
+    /** The parts placed most recently, newest first; the shortcut row at the top of 部品. */
+    let recent: string[] = [];
+    let sortBy: "area" | "new" = "area";
+    let search = "";
     let drag: Drag | undefined;
     let message: string | undefined;
     let missing: string | undefined;
@@ -117,6 +149,78 @@ export const Editor = island(
       netlist = result.netlist;
       sim = netlist === undefined ? undefined : new Simulator(netlist);
       live = sim?.evaluate(inputs);
+    }
+
+    function viewport(): HTMLElement | null {
+      return document.querySelector<HTMLElement>(".viewport");
+    }
+
+    /** The zoom that would show the whole board, margin included, inside the viewport. */
+    function fitZoom(): number {
+      const el = viewport();
+      if (el === null) return 32;
+      const wide = el.clientWidth / (design.width + 2);
+      const tall = el.clientHeight / (design.height + 2);
+      return clamp(Math.min(wide, tall), MIN_ZOOM, MAX_ZOOM);
+    }
+
+    function fit(): void {
+      zoom = fitZoom();
+      zoomedByHand = false;
+      handle.update();
+      requestAnimationFrame(centreView);
+    }
+
+    function setZoom(next: number): void {
+      const el = viewport();
+      const before = el === null ? undefined : {
+        x: (el.scrollLeft + el.clientWidth / 2) / (zoom ?? 32),
+        y: (el.scrollTop + el.clientHeight / 2) / (zoom ?? 32),
+      };
+      zoom = clamp(next, MIN_ZOOM, MAX_ZOOM);
+      zoomedByHand = true;
+      handle.update();
+      // Keep whatever was in the middle of the viewport in the middle of it.
+      if (el !== null && before !== undefined) {
+        requestAnimationFrame(() => {
+          el.scrollLeft = before.x * zoom! - el.clientWidth / 2;
+          el.scrollTop = before.y * zoom! - el.clientHeight / 2;
+        });
+      }
+    }
+
+    function centreView(): void {
+      const el = viewport();
+      if (el === null) return;
+      el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
+      el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+    }
+
+    function openPanel(next: Tab): void {
+      tab = next;
+      panelOpen = true;
+      handle.update();
+      if (next === "board") requestAnimationFrame(revealBoardBottom);
+    }
+
+    /**
+     * The board tab draws the doomed row along the bottom edge, which on a phone is exactly where
+     * the sheet sits. Scroll the board clear of it — the viewport gains room below for this.
+     */
+    function revealBoardBottom(): void {
+      const el = viewport();
+      const board = el?.querySelector<SVGElement>("svg.board");
+      const panel = document.querySelector<HTMLElement>(".panel");
+      if (el === null || board === null || board === undefined) return;
+      const covered = panel === null ? 0 : Math.max(
+        0,
+        el.getBoundingClientRect().bottom -
+          panel.getBoundingClientRect().top,
+      );
+      if (covered === 0) return;
+      const bottom = board.getBoundingClientRect().bottom -
+        el.getBoundingClientRect().top + el.scrollTop;
+      el.scrollTop = Math.max(0, bottom - (el.clientHeight - covered) + 12);
     }
 
     function saveDraft(): void {
@@ -223,6 +327,12 @@ export const Editor = island(
       );
     }
 
+    /** Moves a part to the front of the shortcut row, keeping the four most recent. */
+    function remember(componentId: string): void {
+      recent = [componentId, ...recent.filter((id) => id !== componentId)]
+        .slice(0, 4);
+    }
+
     /** Applies an edit: `undefined` means it was refused, and `why` is shown instead. */
     function commit(next: Design | undefined, why?: string): void {
       if (next === undefined) {
@@ -302,14 +412,25 @@ export const Editor = island(
       save = loadSave() ?? emptySave();
       library = createLibrary(save.components);
       design = save.drafts[stage.id] ?? edit.defaultDesign(stage);
+      panelOpen = globalThis.matchMedia(`(min-width: ${WIDE}px)`).matches;
       rebuild();
       handle.update();
+      requestAnimationFrame(fit);
+    }
+
+    /** A resize changes what fits, so refit — unless the player has set the zoom themselves. */
+    function onResize(): void {
+      if (zoomedByHand) return;
+      fit();
     }
 
     // Only in the browser: the server render is the placeholder below.
     if (typeof document !== "undefined") {
       setTimeout(init, 0);
       globalThis.addEventListener("keydown", onKey, { signal: handle.signal });
+      globalThis.addEventListener("resize", onResize, {
+        signal: handle.signal,
+      });
     }
 
     function onKey(event: KeyboardEvent): void {
@@ -340,7 +461,43 @@ export const Editor = island(
       }
     }
 
+    /**
+     * What 回転 and 反転 would turn: the selected part, else the one about to be placed. Both
+     * the bar over the board and the r / f keys work on it.
+     */
+    function orientTarget():
+      | { def: ComponentDef; placement: Placement; index?: number }
+      | undefined {
+      if (selected !== undefined && tool.kind === "select") {
+        const placement = design.placements[selected];
+        const def = library.get(placement.componentId);
+        return def === undefined
+          ? undefined
+          : { def, placement, index: selected };
+      }
+      if (tool.kind === "place") {
+        const def = library.get(tool.componentId);
+        return def === undefined ? undefined : {
+          def,
+          placement: {
+            componentId: tool.componentId,
+            x: 0,
+            y: 0,
+            ...orientation,
+          },
+        };
+      }
+      return undefined;
+    }
+
     function transform(how: "rotate" | "mirror"): void {
+      // Mirroring a part whose pins map onto themselves changes nothing, so it is not offered.
+      const target = orientTarget();
+      if (
+        how === "mirror" && target !== undefined && mirrorSymmetric(target.def)
+      ) {
+        return;
+      }
       const apply = (o: { rotation: Rotation; mirror: boolean }) =>
         how === "rotate"
           ? { ...o, rotation: ((o.rotation + 1) % 4) as Rotation }
@@ -418,6 +575,7 @@ export const Editor = island(
             break;
           }
           drag = { kind: "idle" };
+          remember(tool.componentId);
           commit(
             edit.addPlacement(design, library, {
               componentId: tool.componentId,
@@ -516,6 +674,7 @@ export const Editor = island(
       switch (finished.kind) {
         case "placing":
           if (hover !== undefined && edit.inBoard(design, hover)) {
+            remember(finished.componentId);
             commit(
               edit.addPlacement(design, library, {
                 componentId: finished.componentId,
@@ -832,9 +991,46 @@ export const Editor = island(
       );
     }
 
+    /**
+     * The row and column a − would take, outlined in red while the board tab is open. The rule is
+     * "the far edge if it is empty, else the near one", which is invisible until you can see it.
+     */
+    function renderShrinkPreview(): RemixNode {
+      if (!panelOpen || tab !== "board") return null;
+      const column = edit.shrinkTarget(design, library, "x");
+      const row = edit.shrinkTarget(design, library, "y");
+      return (
+        <>
+          {column !== undefined
+            ? (
+              <rect
+                class="doomed"
+                x={px(column.index)}
+                y={px(0)}
+                width={CELL}
+                height={design.height * CELL}
+              />
+            )
+            : null}
+          {row !== undefined
+            ? (
+              <rect
+                class="doomed"
+                x={px(0)}
+                y={px(row.index)}
+                width={design.width * CELL}
+                height={CELL}
+              />
+            )
+            : null}
+        </>
+      );
+    }
+
     function renderBoard(): RemixNode {
       const w = (design.width + 2) * CELL;
       const h = (design.height + 2) * CELL;
+      const scale = (zoom ?? 32) / CELL;
       const problemCells = new Set(
         problems.flatMap((p) => p.cells ?? []).map((c) => cellKey(c.x, c.y)),
       );
@@ -848,9 +1044,8 @@ export const Editor = island(
       return (
         <svg
           viewBox={`0 0 ${w} ${h}`}
-          width={w}
-          height={h}
-          style={`max-width:${w * 2}px`}
+          width={Math.round(w * scale)}
+          height={Math.round(h * scale)}
           class={`board tool-${tool.kind}`}
           mix={[
             on("pointerdown", (event) => pointerDown(event as PointerEvent)),
@@ -899,6 +1094,7 @@ export const Editor = island(
               />
             );
           })}
+          {renderShrinkPreview()}
           {Object.entries(design.cells).map(([key, cell]) =>
             renderCell(key, cell)
           )}
@@ -909,56 +1105,290 @@ export const Editor = island(
       );
     }
 
-    function toolButton(t: Tool, label: string): RemixNode {
-      const active = t.kind === tool.kind &&
-        (t.kind !== "place" ||
-          (tool.kind === "place" && tool.componentId === t.componentId));
+    /**
+     * The part's footprint, drawn to scale. Area is the score, so what a card most needs to say
+     * is its shape and its size — XOR 4×3 and XOR 6×2 are one word apart and nothing alike.
+     */
+    function sizeGlyph(def: ComponentDef): RemixNode {
+      const step = clamp(
+        Math.floor(30 / Math.max(def.width, def.height)),
+        3,
+        8,
+      );
+      const w = def.width * step;
+      const h = def.height * step;
+      return (
+        <svg
+          class="size-glyph"
+          width={w + 2}
+          height={h + 2}
+          viewBox={`0 0 ${w + 2} ${h + 2}`}
+          aria-hidden="true"
+        >
+          <rect x="1" y="1" width={w} height={h} rx="1.5" />
+          {Array.from({ length: def.width - 1 }, (_, i) => (
+            <line
+              key={`v${i}`}
+              x1={1 + (i + 1) * step}
+              y1="1"
+              x2={1 + (i + 1) * step}
+              y2={1 + h}
+            />
+          ))}
+          {Array.from({ length: def.height - 1 }, (_, i) => (
+            <line
+              key={`h${i}`}
+              x1="1"
+              y1={1 + (i + 1) * step}
+              x2={1 + w}
+              y2={1 + (i + 1) * step}
+            />
+          ))}
+        </svg>
+      );
+    }
+
+    /** `smallest` marks the tightest build of a function, which is the one worth reaching for. */
+    function partButton(def: ComponentDef, smallest = false): RemixNode {
+      const active = tool.kind === "place" && tool.componentId === def.id;
       return (
         <button
+          key={def.id}
           type="button"
-          class={active ? "active" : ""}
+          class={`part-card${active ? " active" : ""}`}
           mix={[on("click", () => {
-            tool = t;
-            if (t.kind !== "select") selected = undefined;
+            tool = { kind: "place", componentId: def.id };
+            selected = undefined;
             handle.update();
           })]}
         >
-          {label}
+          {sizeGlyph(def)}
+          <span class="text">
+            <span class="name">
+              {def.name}
+              {smallest ? <em>最小</em> : null}
+            </span>
+            <small>
+              {def.width}×{def.height} ・ 面積 {def.width * def.height}
+            </small>
+          </span>
         </button>
       );
     }
 
-    function partButton(def: ComponentDef): RemixNode {
-      return toolButton(
-        { kind: "place", componentId: def.id },
-        def.primitive && def.primitive !== "split"
-          ? def.name
-          : `${def.name} (${def.width}×${def.height})`,
+    /** Area first, so the cheapest build of a function is the one at the top. */
+    function sorted(components: ComponentDef[]): ComponentDef[] {
+      return [...components].sort((a, b) =>
+        sortBy === "new"
+          ? b.createdAt.localeCompare(a.createdAt)
+          : a.width * a.height - b.width * b.height ||
+            a.name.localeCompare(b.name)
       );
     }
 
-    function sizeInput(which: "width" | "height"): RemixNode {
-      const max = stage?.maxSize[which] ?? 64;
+    function matches(def: ComponentDef): boolean {
+      const q = search.trim().toLowerCase();
+      return q === "" || def.name.toLowerCase().includes(q);
+    }
+
+    function renderParts(): RemixNode {
+      const groups = STAGES
+        .map((s) => {
+          const components = sorted(
+            save.components.filter((c) => c.stageId === s.id && matches(c)),
+          );
+          return {
+            stage: s,
+            components,
+            smallest: Math.min(
+              ...components.map((c) => c.width * c.height),
+            ),
+          };
+        })
+        .filter((g) => g.components.length > 0);
+      const shortcuts = recent
+        .map((id) => library.get(id))
+        .filter((d): d is ComponentDef => d !== undefined);
+      const many = save.components.length > 6;
       return (
-        <input
-          key={`${which}-${design[which]}`}
-          type="number"
-          min={1}
-          max={max}
-          defaultValue={String(design[which])}
-          mix={[on("change", (event) => {
-            const input = event.currentTarget as HTMLInputElement;
-            const value = Math.min(max, Number(input.value));
-            const next = which === "width"
-              ? edit.resize(design, library, value, design.height)
-              : edit.resize(design, library, design.width, value);
-            if (next === undefined) input.value = String(design[which]);
-            commit(
-              next,
-              "空いている行や列がありません。端の配線や部品、ピンをどかしてください",
-            );
-          })]}
-        />
+        <div class="parts">
+          {many
+            ? (
+              <div class="part-search">
+                <input
+                  key="part-search"
+                  type="text"
+                  placeholder="名前で探す"
+                  defaultValue={search}
+                  mix={[on("input", (event) => {
+                    search = (event.currentTarget as HTMLInputElement).value;
+                    handle.update();
+                  })]}
+                />
+                <div class="sort">
+                  <span>並び</span>
+                  {(["area", "new"] as const).map((how) => (
+                    <button
+                      key={how}
+                      type="button"
+                      class={sortBy === how ? "active" : ""}
+                      mix={[on("click", () => {
+                        sortBy = how;
+                        handle.update();
+                      })]}
+                    >
+                      {how === "area" ? "面積の小さい順" : "登録が新しい順"}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+            : null}
+          {shortcuts.length > 0
+            ? (
+              <>
+                <span class="group-title">よく使う</span>
+                <div class="part-grid">
+                  {shortcuts.map((def) => partButton(def))}
+                </div>
+              </>
+            )
+            : null}
+          <span class="group-title">素子</span>
+          <div class="part-grid">
+            {PRIMITIVES.filter(matches).map((def) => partButton(def))}
+          </div>
+          {groups.length > 0
+            ? <span class="group-title">ライブラリ</span>
+            : null}
+          {groups.map((g) => (
+            <div key={g.stage.id}>
+              <span class="group-title sub">{g.stage.title}</span>
+              <div class="part-grid">
+                {g.components.map((def) => (
+                  partButton(
+                    def,
+                    g.components.length > 1 &&
+                      def.width * def.height === g.smallest,
+                  )
+                ))}
+              </div>
+            </div>
+          ))}
+          {groups.length === 0 && search.trim() !== ""
+            ? <p class="hint">その名前の部品はありません。</p>
+            : null}
+        </div>
+      );
+    }
+
+    const CANNOT_SHRINK =
+      "端の行と列がどちらも使われています。先に端の配線や部品、ピンをどかしてください";
+
+    function resizeTo(width: number, height: number): void {
+      commit(edit.resize(design, library, width, height), CANNOT_SHRINK);
+    }
+
+    /** 幅 or 高さ: − + and the number, with − off when nothing can go. */
+    function sizeRow(which: "width" | "height"): RemixNode {
+      const axis = which === "width" ? "x" : "y";
+      const max = stage?.maxSize[which] ?? 64;
+      const value = design[which];
+      const canShrink = edit.shrinkTarget(design, library, axis) !== undefined;
+      const step = (by: number) =>
+        which === "width"
+          ? resizeTo(clamp(value + by, 1, max), design.height)
+          : resizeTo(design.width, clamp(value + by, 1, max));
+      return (
+        <div class="size-row">
+          <span class="label">{which === "width" ? "幅" : "高さ"}</span>
+          <button
+            type="button"
+            class="step"
+            disabled={!canShrink}
+            title={canShrink ? "1 減らす" : CANNOT_SHRINK}
+            mix={[on("click", () => step(-1))]}
+          >
+            −
+          </button>
+          <span class="value">{value}</span>
+          <button
+            type="button"
+            class="step"
+            disabled={value >= max}
+            title="1 増やす"
+            mix={[on("click", () => step(1))]}
+          >
+            +
+          </button>
+        </div>
+      );
+    }
+
+    function renderBoardTab(current: Stage): RemixNode {
+      const target = par(current.id);
+      const over = target === undefined ? undefined : area(design) - target;
+      const tight = edit.compact(design, library);
+      const stuck = edit.shrinkTarget(design, library, "x") === undefined &&
+        edit.shrinkTarget(design, library, "y") === undefined;
+      return (
+        <div class="board-tab">
+          {sizeRow("width")}
+          {sizeRow("height")}
+          <div class="area-row">
+            <span>面積</span>
+            <strong>{area(design)}</strong>
+            {over !== undefined
+              ? (
+                <em class={over > 0 ? "over" : "under"}>
+                  {over === 0
+                    ? "パーちょうど"
+                    : over > 0
+                    ? `+${over}`
+                    : `${over}`}
+                </em>
+              )
+              : null}
+            <span class="spacer" />
+            {target !== undefined ? <small>パー {target}</small> : null}
+          </div>
+          <p class="hint">
+            面積がそのままスコアです。赤い枠が、次に「−」で消える行と列です。
+          </p>
+          {stuck ? <p class="warn">{CANNOT_SHRINK}</p> : null}
+          <button
+            type="button"
+            class="compact"
+            disabled={tight === undefined}
+            mix={[on("click", () => {
+              commit(tight, CANNOT_SHRINK);
+            })]}
+          >
+            余白を詰める
+            {tight !== undefined
+              ? <em>{tight.width}×{tight.height} にする</em>
+              : <em>余白はありません</em>}
+          </button>
+          <div class="group">
+            <button
+              type="button"
+              disabled={history.length === 0}
+              mix={[on("click", undo)]}
+            >
+              元に戻す (Ctrl+Z)
+            </button>
+            <button
+              type="button"
+              class="danger"
+              mix={[on("click", () => {
+                selected = undefined;
+                commit(edit.defaultDesign(current));
+              })]}
+            >
+              盤面を空にする
+            </button>
+          </div>
+        </div>
       );
     }
 
@@ -1102,133 +1532,448 @@ export const Editor = island(
       );
     }
 
+    /** The stage's own explanation, folded away behind the ⓘ in the bar. */
+    function renderInfo(current: Stage): RemixNode {
+      if (!infoOpen) return null;
+      return (
+        <div class="info-panel">
+          <p>{current.description}</p>
+          <p class="meta">
+            <span>入力 {specList(current.inputs)}</span>
+            <span>出力 {specList(current.outputs)}</span>
+          </p>
+          <p class="hint">
+            配線ツールで盤面をドラッグすると線が引けます。端のマスから外のピンへ向かってドラッグすると、ピンにつながります。
+            部品の端子（小さな四角が入力、丸が出力）へも同じように引きます。端子同士を隣接させれば配線なしでつながります。
+          </p>
+          <p class="hint">
+            バスは 8 本をまとめた配線で、太く描かれます。1
+            本の配線とは直接つながらず、Bus split でばらします。
+            バスの入力ピンはクリックで 1
+            ずつ増え、テストのタブで値を直接入れられます。
+          </p>
+          <p class="hint">
+            入力ピンはクリックで
+            on/off。ピンは外周をドラッグで移動。部品は選択してドラッグで移動、Delete
+            で削除。キーは v 選択 / w 配線 / b バス / x 交差 / e 消去 / r 回転 /
+            f 反転。
+          </p>
+        </div>
+      );
+    }
+
+    /** One tool, in the dock on a phone and in the rail on a wide screen — the same element. */
+    function dockButton(t: Tool, label: string, icon: RemixNode): RemixNode {
+      const active = t.kind === tool.kind &&
+        (t.kind !== "place" ||
+          (tool.kind === "place" && tool.componentId === t.componentId));
+      return (
+        <button
+          type="button"
+          class={`dock-button${active ? " active" : ""}`}
+          mix={[on("click", () => {
+            tool = t;
+            if (t.kind !== "select") selected = undefined;
+            handle.update();
+          })]}
+        >
+          {icon}
+          <span>{label}</span>
+        </button>
+      );
+    }
+
+    function icon(path: RemixNode, width = 2): RemixNode {
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          width="22"
+          height="22"
+          fill="none"
+          stroke="currentColor"
+          stroke-width={String(width)}
+          stroke-linecap="round"
+          stroke-linejoin="round"
+        >
+          {path}
+        </svg>
+      );
+    }
+
+    function renderTools(): RemixNode {
+      return (
+        <div class="tools">
+          {dockButton(
+            { kind: "select" },
+            "選択",
+            icon(<path d="M5 3l14 8-6 1.6L9.6 19z" />, 1.8),
+          )}
+          {dockButton(
+            { kind: "wire" },
+            "配線",
+            icon(<path d="M3 18h7V6h11" />),
+          )}
+          {dockButton(
+            { kind: "bus" },
+            "バス",
+            icon(<path d="M3 18h7V6h11" />, 4.5),
+          )}
+          {dockButton(
+            { kind: "cross" },
+            "交差",
+            icon(
+              <>
+                <path d="M3 12h18" />
+                <path d="M12 3v5" />
+                <path d="M12 16v5" />
+              </>,
+            ),
+          )}
+          {dockButton(
+            { kind: "erase" },
+            "消去",
+            icon(
+              <>
+                <path d="M6 16l7-7 5 5-4 4H8z" />
+                <path d="M3 20h18" />
+              </>,
+              1.8,
+            ),
+          )}
+          <button
+            type="button"
+            class={`dock-button${tool.kind === "place" ? " active" : ""}`}
+            mix={[on("click", () => openPanel("parts"))]}
+          >
+            {icon(
+              <>
+                <rect x="7" y="7" width="10" height="10" rx="2" />
+                <path d="M12 3v4" />
+                <path d="M12 17v4" />
+                <path d="M3 12h4" />
+                <path d="M17 12h4" />
+              </>,
+              1.8,
+            )}
+            <span>部品</span>
+          </button>
+          <button
+            type="button"
+            class="dock-button undo"
+            disabled={history.length === 0}
+            mix={[on("click", undo)]}
+          >
+            {icon(
+              <>
+                <path d="M9 7L4 12l5 5" />
+                <path d="M4 12h11a5 5 0 0 1 0 10h-3" />
+              </>,
+            )}
+            <span>取消</span>
+          </button>
+        </div>
+      );
+    }
+
+    /**
+     * The bar over the board while a part is in hand or selected: which way it is facing, and the
+     * two controls that change it. The glyph is the real footprint with the first pin marked, so
+     * a rotation is visible as a rotation rather than as the word "90°".
+     */
+    function renderOrientBar(): RemixNode {
+      const target = orientTarget();
+      if (target === undefined) return null;
+      const { def, placement } = target;
+      const shape = footprint(def, placement);
+      const first = worldPins(def, { ...placement, x: 0, y: 0 })[0];
+      const step = clamp(
+        Math.floor(26 / Math.max(shape.width, shape.height)),
+        4,
+        9,
+      );
+      const symmetric = mirrorSymmetric(def);
+      return (
+        <div class="orient">
+          <svg
+            class="size-glyph"
+            width={shape.width * step + 2}
+            height={shape.height * step + 2}
+            aria-hidden="true"
+          >
+            {first !== undefined
+              ? (
+                <rect
+                  class="pin-cell"
+                  x={1 + first.x * step}
+                  y={1 + first.y * step}
+                  width={step}
+                  height={step}
+                />
+              )
+              : null}
+            <rect
+              x="1"
+              y="1"
+              width={shape.width * step}
+              height={shape.height * step}
+              rx="1.5"
+            />
+            {Array.from({ length: shape.width - 1 }, (_, i) => (
+              <line
+                key={`v${i}`}
+                x1={1 + (i + 1) * step}
+                y1="1"
+                x2={1 + (i + 1) * step}
+                y2={1 + shape.height * step}
+              />
+            ))}
+            {Array.from({ length: shape.height - 1 }, (_, i) => (
+              <line
+                key={`h${i}`}
+                x1="1"
+                y1={1 + (i + 1) * step}
+                x2={1 + shape.width * step}
+                y2={1 + (i + 1) * step}
+              />
+            ))}
+          </svg>
+          <span class="text">
+            <span class="name">{def.name}</span>
+            <small>
+              {shape.width}×{shape.height} ・ {placement.rotation * 90}°
+              {placement.mirror && !symmetric ? " 反転" : ""}
+            </small>
+          </span>
+          <button
+            type="button"
+            title="回転 (r)"
+            mix={[on("click", () => transform("rotate"))]}
+          >
+            {icon(
+              <>
+                <path d="M20 11a8 8 0 1 0-2.3 6.1" />
+                <path d="M20 4v7h-7" />
+              </>,
+            )}
+          </button>
+          {symmetric ? <span class="symmetric">左右対称</span> : (
+            <button
+              type="button"
+              class={placement.mirror ? "active" : ""}
+              title="反転 (f)"
+              mix={[on("click", () => transform("mirror"))]}
+            >
+              {icon(
+                <>
+                  <path d="M12 3v18" />
+                  <path d="M8 7L3 12l5 5" />
+                  <path d="M16 7l5 5-5 5" />
+                </>,
+              )}
+            </button>
+          )}
+        </div>
+      );
+    }
+
+    function renderPanel(current: Stage): RemixNode {
+      const tabButton = (id: Tab, label: string) => (
+        <button
+          type="button"
+          class={tab === id ? "active" : ""}
+          mix={[on("click", () => openPanel(id))]}
+        >
+          {label}
+        </button>
+      );
+      return (
+        <aside class="panel">
+          <div class="grabber" />
+          <div class="tabs">
+            {tabButton("parts", "部品")}
+            {tabButton("tests", "テスト")}
+            {tabButton("board", "盤面")}
+            <button
+              type="button"
+              class="collapse"
+              title="パネルを畳む"
+              mix={[on("click", () => {
+                panelOpen = false;
+                handle.update();
+              })]}
+            >
+              {icon(<path d="M9 5l7 7-7 7" />)}
+            </button>
+          </div>
+          <div class="panel-body">
+            {tab === "parts" ? renderParts() : null}
+            {tab === "tests"
+              ? (
+                <div class="toolbar">
+                  {renderBusInputs()}
+                  {renderTests()}
+                  {renderAchievements()}
+                </div>
+              )
+              : null}
+            {tab === "board" ? renderBoardTab(current) : null}
+          </div>
+        </aside>
+      );
+    }
+
     return () => {
       if (missing !== undefined) {
         return (
           <p>
-            ステージ「{missing}」はありません。<a
+            ステージ「{missing}」はありません。<Link
               href={handle.props.base || "/"}
             >
               ステージ一覧へ
-            </a>
+            </Link>
           </p>
         );
       }
       if (stage === undefined) return <p>読み込み中…</p>;
       const current = stage;
-      const byStage = STAGES
-        .map((s) => ({
-          stage: s,
-          components: save.components.filter((c) => c.stageId === s.id),
-        }))
-        .filter((g) => g.components.length > 0);
+      const index = STAGES.findIndex((s) => s.id === current.id);
       const target = par(current.id);
+      const passed = tests.filter((t) => t.ok).length;
+      const allPassed = problems.length === 0 && tests.length > 0 &&
+        passed === tests.length;
+      const base = handle.props.base;
+      const stageHref = (s: Stage) => `${base}/play/${s.id}`;
       return (
-        <div class="editor">
-          <header class="stage-head">
-            <h1>{current.title}</h1>
-            <p>{current.description}</p>
-            <p class="meta">
-              <span>入力 {specList(current.inputs)}</span>
-              <span>出力 {specList(current.outputs)}</span>
-            </p>
-            <p class="meta">
-              <span>
-                面積 <strong>{area(design)}</strong>
-              </span>
-              {target !== undefined ? <span>パー {target}</span> : null}
-              {save.best[current.id] !== undefined
-                ? <span>自己ベスト {save.best[current.id]}</span>
+        <div
+          class={`editor tab-${tab}${panelOpen ? " panel-open" : ""}`}
+        >
+          <header class="app-bar">
+            <Link class="back" href={base || "/"}>
+              {icon(<path d="M15 5l-7 7 7 7" />)}
+              <span>ステージ一覧</span>
+            </Link>
+            <div class="who">
+              <h1>{current.title}</h1>
+              <span>{index + 1} / {STAGES.length}</span>
+            </div>
+            <button
+              type="button"
+              class={`info${infoOpen ? " active" : ""}`}
+              title="このステージの説明"
+              mix={[on("click", () => {
+                infoOpen = !infoOpen;
+                handle.update();
+              })]}
+            >
+              {icon(
+                <>
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 11v5" />
+                  <path d="M12 7.6v.1" />
+                </>,
+              )}
+            </button>
+            <span class="spacer" />
+            <span class={`pill result${allPassed ? " pass" : ""}`}>
+              テスト {passed} / {tests.length}
+            </span>
+            <span class="pill">
+              面積 <strong>{area(design)}</strong>
+              {target !== undefined ? <em>/ パー {target}</em> : null}
+            </span>
+            <nav class="stage-jump">
+              {index > 0
+                ? (
+                  <Link href={stageHref(STAGES[index - 1])}>
+                    ← {STAGES[index - 1].title}
+                  </Link>
+                )
                 : null}
-            </p>
+              {index < STAGES.length - 1
+                ? (
+                  <Link href={stageHref(STAGES[index + 1])}>
+                    {STAGES[index + 1].title} →
+                  </Link>
+                )
+                : null}
+            </nav>
           </header>
-          <div class="workspace">
-            <div class="board-wrap">{renderBoard()}</div>
-            <aside class="side">
-              <div class="toolbar">
-                <div class="group">
-                  {toolButton({ kind: "select" }, "選択 (v)")}
-                  {toolButton({ kind: "wire" }, "配線 (w)")}
-                  {toolButton({ kind: "bus" }, "バス (b)")}
-                  {toolButton({ kind: "cross" }, "交差 (x)")}
-                  {toolButton({ kind: "erase" }, "消去 (e)")}
+          {renderInfo(current)}
+          <div class="app-body">
+            {renderTools()}
+            <div class="board-col">
+              <div class="stage">
+                <div class="viewport">
+                  {renderBoard()}
                 </div>
-                <div class="group">
-                  <span class="group-title">素子</span>
-                  {PRIMITIVES.map(partButton)}
-                </div>
-                {byStage.length > 0
-                  ? <span class="group-title">ライブラリ</span>
-                  : null}
-                {byStage.map((g) => (
-                  <div class="group" key={g.stage.id}>
-                    <span class="group-title sub">{g.stage.title}</span>
-                    {g.components.map(partButton)}
-                  </div>
-                ))}
-                <div class="group">
+                <div class="zoom">
                   <button
                     type="button"
-                    mix={[on("click", () => transform("rotate"))]}
+                    title="拡大"
+                    mix={[on("click", () => setZoom((zoom ?? 32) * ZOOM_STEP))]}
                   >
-                    回転 (r)
+                    +
                   </button>
                   <button
                     type="button"
-                    mix={[on("click", () => transform("mirror"))]}
+                    title="縮小"
+                    mix={[on("click", () => setZoom((zoom ?? 32) / ZOOM_STEP))]}
                   >
-                    反転 (f)
-                  </button>
-                  <span class="hint">
-                    {orientation.rotation * 90}°{orientation.mirror
-                      ? " 反転"
-                      : ""}
-                  </span>
-                </div>
-                <div class="group">
-                  <label>幅 {sizeInput("width")}</label>
-                  <label>高さ {sizeInput("height")}</label>
-                </div>
-                <div class="group">
-                  <button
-                    type="button"
-                    disabled={history.length === 0}
-                    mix={[on("click", undo)]}
-                  >
-                    元に戻す (Ctrl+Z)
+                    −
                   </button>
                   <button
                     type="button"
-                    mix={[on("click", () => {
-                      selected = undefined;
-                      commit(edit.defaultDesign(current));
-                    })]}
+                    title="全体を表示"
+                    mix={[on("click", fit)]}
                   >
-                    盤面を空にする
+                    {icon(
+                      <>
+                        <path d="M4 9V4h5" />
+                        <path d="M20 9V4h-5" />
+                        <path d="M4 15v5h5" />
+                        <path d="M20 15v5h-5" />
+                      </>,
+                    )}
                   </button>
                 </div>
-                {renderBusInputs()}
+                {renderOrientBar()}
                 {message ? <p class="message">{message}</p> : null}
-                <p class="hint">
-                  配線ツールで盤面をドラッグすると線が引ける。端のマスから外のピンへ向かってドラッグすると、ピンにつながる。
-                  部品の端子（小さな四角が入力、丸が出力）へも同じように引く。端子同士を隣接させれば配線なしでつながる。
-                </p>
-                <p class="hint">
-                  バスは 8 本をまとめた配線で、太く描かれる。1
-                  本の配線とは直接つながらず、Bus split でばらす。
-                  バスの入力ピンはクリックで 1
-                  ずつ増え、上の欄で値を直接入れられる。
-                </p>
-                <p class="hint">
-                  入力ピンはクリックで
-                  on/off。ピンは外周をドラッグで移動。部品は選択してドラッグで移動、Delete
-                  で削除。
-                </p>
               </div>
-              {renderTests()}
-              {renderAchievements()}
-            </aside>
+              <div class="status">
+                <span>{design.width} × {design.height} マス</span>
+                <span>1マス {Math.round(zoom ?? 32)}px</span>
+              </div>
+              <button
+                type="button"
+                class={`test-bar${allPassed ? " pass" : ""}`}
+                mix={[on("click", () => openPanel("tests"))]}
+              >
+                <span class="mark">{allPassed ? "✓" : "…"}</span>
+                <span class="count">テスト {passed} / {tests.length}</span>
+                <span class="note">
+                  {problems.length > 0
+                    ? problems[0].message
+                    : allPassed
+                    ? "すべて合格"
+                    : ""}
+                </span>
+                <span class="spacer" />
+                {icon(<path d="M6 15l6-6 6 6" />)}
+              </button>
+            </div>
+            {renderPanel(current)}
           </div>
+          {panelOpen
+            ? (
+              <div
+                class="scrim"
+                mix={[on("click", () => {
+                  panelOpen = false;
+                  handle.update();
+                })]}
+              />
+            )
+            : null}
         </div>
       );
     };

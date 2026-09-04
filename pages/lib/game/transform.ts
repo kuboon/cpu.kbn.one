@@ -72,6 +72,20 @@ export function worldPins(def: ComponentDef, placement: Placement): WorldPin[] {
   });
 }
 
+/**
+ * Whether mirroring a component changes nothing: every pin keeps its own place and facing. A
+ * placement is defined by its pins alone, so for such a component the mirror flag is a no-op and
+ * the editor offers no 反転 for it.
+ */
+export function mirrorSymmetric(def: ComponentDef): boolean {
+  const at = { componentId: def.id, x: 0, y: 0, rotation: 0 as const };
+  const plain = worldPins(def, { ...at, mirror: false });
+  const flipped = worldPins(def, { ...at, mirror: true });
+  return plain.every((p, i) =>
+    p.x === flipped[i].x && p.y === flipped[i].y && p.side === flipped[i].side
+  );
+}
+
 /** Every cell a placed component covers. */
 export function occupiedCells(
   def: ComponentDef,
