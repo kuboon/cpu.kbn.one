@@ -29,6 +29,7 @@ export const STAGES: readonly Stage[] = [
     outputs: pins("out"),
     steps: truthTable(["a"], ({ a }) => ({ out: bit(!a) })),
     maxSize: SMALL,
+    initialSize: { width: 6, height: 4 },
   },
   {
     id: "nand",
@@ -39,6 +40,7 @@ export const STAGES: readonly Stage[] = [
     outputs: pins("out"),
     steps: truthTable(["a", "b"], ({ a, b }) => ({ out: bit(!(a && b)) })),
     maxSize: SMALL,
+    initialSize: { width: 6, height: 4 },
   },
   {
     id: "and",
@@ -48,6 +50,7 @@ export const STAGES: readonly Stage[] = [
     outputs: pins("out"),
     steps: truthTable(["a", "b"], ({ a, b }) => ({ out: bit(!!(a && b)) })),
     maxSize: SMALL,
+    initialSize: { width: 6, height: 4 },
   },
   {
     id: "or",
@@ -57,6 +60,7 @@ export const STAGES: readonly Stage[] = [
     outputs: pins("out"),
     steps: truthTable(["a", "b"], ({ a, b }) => ({ out: bit(!!(a || b)) })),
     maxSize: SMALL,
+    initialSize: { width: 6, height: 4 },
   },
   {
     id: "xor",
@@ -67,6 +71,7 @@ export const STAGES: readonly Stage[] = [
     outputs: pins("out"),
     steps: truthTable(["a", "b"], ({ a, b }) => ({ out: bit(a !== b) })),
     maxSize: SMALL,
+    initialSize: { width: 6, height: 4 },
   },
   {
     id: "selector",
@@ -76,6 +81,7 @@ export const STAGES: readonly Stage[] = [
     outputs: pins("out"),
     steps: truthTable(["s", "a", "b"], ({ s, a, b }) => ({ out: s ? b : a })),
     maxSize: SMALL,
+    initialSize: { width: 6, height: 4 },
   },
   {
     id: "switch",
@@ -88,6 +94,7 @@ export const STAGES: readonly Stage[] = [
       ({ s, in: v }) => ({ a: s ? 0 : v, b: s ? v : 0 }),
     ),
     maxSize: SMALL,
+    initialSize: { width: 6, height: 4 },
   },
   {
     id: "half-adder",
@@ -100,6 +107,7 @@ export const STAGES: readonly Stage[] = [
       ({ a, b }) => ({ s: bit(a !== b), c: bit(!!(a && b)) }),
     ),
     maxSize: SMALL,
+    initialSize: { width: 8, height: 6 },
   },
   {
     id: "full-adder",
@@ -112,6 +120,7 @@ export const STAGES: readonly Stage[] = [
       return { s: (sum & 1) as Bit, co: bit(sum >= 2) };
     }),
     maxSize: { width: 24, height: 24 },
+    initialSize: { width: 12, height: 8 },
   },
   {
     id: "sr-latch",
@@ -132,6 +141,7 @@ export const STAGES: readonly Stage[] = [
       [{ r: 0 }, { q: 0 }],
     ),
     maxSize: SMALL,
+    initialSize: { width: 6, height: 4 },
   },
   {
     id: "d-latch",
@@ -157,6 +167,7 @@ export const STAGES: readonly Stage[] = [
       [{ st: 0 }, { q: 1 }],
     ),
     maxSize: SMALL,
+    initialSize: { width: 6, height: 4 },
   },
   {
     id: "dff",
@@ -182,6 +193,7 @@ export const STAGES: readonly Stage[] = [
       [{ clk: 1 }, { q: 0 }],
     ),
     maxSize: { width: 24, height: 24 },
+    initialSize: { width: 12, height: 8 },
   },
   {
     id: "register-bit",
@@ -208,6 +220,7 @@ export const STAGES: readonly Stage[] = [
       [{ clk: 1 }, { q: 0 }],
     ),
     maxSize: { width: 32, height: 24 },
+    initialSize: { width: 12, height: 8 },
   },
   {
     id: "neg8",
@@ -225,6 +238,7 @@ export const STAGES: readonly Stage[] = [
       { a: 255 },
     ]),
     maxSize: { width: 16, height: 16 },
+    initialSize: { width: 12, height: 10 },
   },
   {
     id: "zero8",
@@ -242,6 +256,7 @@ export const STAGES: readonly Stage[] = [
       { a: 0 },
     ]),
     maxSize: { width: 24, height: 24 },
+    initialSize: { width: 12, height: 10 },
   },
   {
     id: "selector8",
@@ -259,6 +274,7 @@ export const STAGES: readonly Stage[] = [
       { s: 1, a: 1, b: 2 },
     ]),
     maxSize: { width: 32, height: 32 },
+    initialSize: { width: 20, height: 12 },
   },
   {
     id: "add8",
@@ -286,6 +302,7 @@ export const STAGES: readonly Stage[] = [
       ],
     ),
     maxSize: { width: 48, height: 48 },
+    initialSize: { width: 24, height: 16 },
   },
   {
     id: "inc8",
@@ -302,6 +319,7 @@ export const STAGES: readonly Stage[] = [
       { a: 255 },
     ]),
     maxSize: { width: 48, height: 48 },
+    initialSize: { width: 20, height: 12 },
   },
   {
     id: "sub8",
@@ -320,6 +338,7 @@ export const STAGES: readonly Stage[] = [
       { a: 200, b: 100 },
     ]),
     maxSize: { width: 48, height: 48 },
+    initialSize: { width: 24, height: 16 },
   },
   {
     id: "register8",
@@ -345,6 +364,7 @@ export const STAGES: readonly Stage[] = [
       [{ clk: 1 }, { q: 255 }],
     ),
     maxSize: { width: 48, height: 48 },
+    initialSize: { width: 24, height: 16 },
   },
   {
     id: "counter8",
@@ -370,6 +390,7 @@ export const STAGES: readonly Stage[] = [
       [{ clk: 1 }, { out: 0 }],
     ),
     maxSize: { width: 64, height: 64 },
+    initialSize: { width: 32, height: 20 },
   },
   {
     id: "logic8",
@@ -396,6 +417,7 @@ export const STAGES: readonly Stage[] = [
       ],
     ),
     maxSize: { width: 64, height: 64 },
+    initialSize: { width: 32, height: 20 },
   },
   {
     id: "arith8",
@@ -423,6 +445,7 @@ export const STAGES: readonly Stage[] = [
       ],
     ),
     maxSize: { width: 64, height: 64 },
+    initialSize: { width: 32, height: 20 },
   },
   {
     id: "alu8",
@@ -458,6 +481,7 @@ export const STAGES: readonly Stage[] = [
       ],
     ),
     maxSize: { width: 64, height: 64 },
+    initialSize: { width: 40, height: 24 },
   },
   {
     id: "cond8",
@@ -482,6 +506,7 @@ export const STAGES: readonly Stage[] = [
       { x: 255, lt: 1, eq: 1, gt: 1 },
     ]),
     maxSize: { width: 32, height: 32 },
+    initialSize: { width: 16, height: 12 },
   },
   {
     id: "ram4",
@@ -515,6 +540,7 @@ export const STAGES: readonly Stage[] = [
       [{ clk: 0, a1: 0, a0: 0 }, { out: 11 }],
     ),
     maxSize: { width: 96, height: 96 },
+    initialSize: { width: 40, height: 28 },
   },
   {
     id: "control8",
@@ -538,6 +564,7 @@ export const STAGES: readonly Stage[] = [
       { i: 0b11111111 },
     ]),
     maxSize: { width: 32, height: 32 },
+    initialSize: { width: 16, height: 12 },
   },
   {
     id: "cpu8",
@@ -552,6 +579,7 @@ export const STAGES: readonly Stage[] = [
       ...harness(PROGRAM_MEMORY, { 3: 42 }),
     ],
     maxSize: { width: 128, height: 128 },
+    initialSize: { width: 64, height: 40 },
   },
 ];
 
