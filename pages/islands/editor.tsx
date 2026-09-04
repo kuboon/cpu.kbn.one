@@ -2,6 +2,8 @@ import { on } from "@remix-run/ui";
 import type { Handle, RemixNode } from "@remix-run/ui";
 import { island } from "@kuboon/remix-ssg/client";
 
+import { Link } from "../lib/link.tsx";
+
 import type {
   Cell,
   ComponentDef,
@@ -1455,11 +1457,11 @@ export const Editor = island(
       if (missing !== undefined) {
         return (
           <p>
-            ステージ「{missing}」はありません。<a
+            ステージ「{missing}」はありません。<Link
               href={handle.props.base || "/"}
             >
               ステージ一覧へ
-            </a>
+            </Link>
           </p>
         );
       }
@@ -1475,10 +1477,10 @@ export const Editor = island(
       return (
         <div class={`editor${panelOpen ? " panel-open" : ""}`}>
           <header class="app-bar">
-            <a class="back" href={base || "/"}>
+            <Link class="back" href={base || "/"}>
               {icon(<path d="M15 5l-7 7 7 7" />)}
               <span>ステージ一覧</span>
-            </a>
+            </Link>
             <div class="who">
               <h1>{current.title}</h1>
               <span>{index + 1} / {STAGES.length}</span>
@@ -1511,16 +1513,16 @@ export const Editor = island(
             <nav class="stage-jump">
               {index > 0
                 ? (
-                  <a href={stageHref(STAGES[index - 1])}>
+                  <Link href={stageHref(STAGES[index - 1])}>
                     ← {STAGES[index - 1].title}
-                  </a>
+                  </Link>
                 )
                 : null}
               {index < STAGES.length - 1
                 ? (
-                  <a href={stageHref(STAGES[index + 1])}>
+                  <Link href={stageHref(STAGES[index + 1])}>
                     {STAGES[index + 1].title} →
-                  </a>
+                  </Link>
                 )
                 : null}
             </nav>
