@@ -259,7 +259,10 @@ export const Editor = island(
     let zoomedByHand = false;
     let panelOpen = false;
     let tab: Tab = "parts";
-    let infoOpen = false;
+    /** Which bar panel is down, if any. One at a time, so ⓘ and ? cannot stack. */
+    let barPanel: "info" | "help" | undefined = undefined;
+    /** Which parts group has its explanation open: "primitives", or a stage id. */
+    let partInfo: string | undefined = undefined;
     /** The parts placed most recently, newest first; the shortcut row at the top of 部品. */
     let recent: string[] = [];
     /** Responses playing right now, by token; each clears itself when its animation ends. */
@@ -1377,6 +1380,69 @@ export const Editor = island(
       return q === "" || def.name.toLowerCase().includes(q);
     }
 
+    /** What each primitive does, in one line — the 素子 group's own explanation. */
+    const PRIMITIVE_HELP: Record<string, string> = {
+      "relay-on":
+        "c が 0 のあいだ in を out に通します。c が 1 になると切れます。",
+      "relay-off":
+        "c が 1 のあいだ in を out に通します。既定では切れています。",
+      one:
+        "4 辺すべてに 1 を出します。定数 0 はありません。つながっていない線は 0 と読まれます。",
+      split:
+        "バスと 8 本の線を相互に変換します。ばらす向きにも束ねる向きにも使えます。",
+    };
+
+    /**
+     * A group's heading, with an ⓘ that drops the group's explanation under it.
+     *
+     * A library group is one stage's parts, however many sizes of it you have built, so the
+     * explanation belongs to the heading rather than to each card.
+     *
+     * @param label The heading text
+     * @param key What identifies this group's panel: a stage id, or "primitives"
+     * @param body The explanation, or undefined for a group that has none
+     * @param sub Whether this is a stage heading nested under ライブラリ
+     */
+    function groupTitle(
+      label: string,
+      key?: string,
+      body?: RemixNode,
+      sub = false,
+    ): RemixNode {
+      const open = key !== undefined && partInfo === key;
+      return (
+        <>
+          <div class={`group-title${sub ? " sub" : ""}`}>
+            <span>{label}</span>
+            {key !== undefined
+              ? (
+                <button
+                  type="button"
+                  class={open ? "active" : ""}
+                  title={`${label} の説明`}
+                  aria-label={`${label} の説明`}
+                  aria-expanded={open ? "true" : "false"}
+                  mix={[on("click", () => {
+                    partInfo = open ? undefined : key;
+                    handle.update();
+                  })]}
+                >
+                  {icon(
+                    <>
+                      <circle cx="12" cy="12" r="9" />
+                      <path d="M12 11v5" />
+                      <path d="M12 7.6v.1" />
+                    </>,
+                  )}
+                </button>
+              )
+              : null}
+          </div>
+          {open ? <div class="group-info">{body}</div> : null}
+        </>
+      );
+    }
+
     function renderParts(): RemixNode {
       const groups = STAGES
         .map((s) => {
@@ -1433,23 +1499,43 @@ export const Editor = island(
           {shortcuts.length > 0
             ? (
               <>
-                <span class="group-title">よく使う</span>
+                {groupTitle("よく使う")}
                 <div class="part-grid">
                   {shortcuts.map((def) => partButton(def))}
                 </div>
               </>
             )
             : null}
-          <span class="group-title">素子</span>
+          {groupTitle(
+            "素子",
+            "primitives",
+            <>
+              <p>どれも回転と反転ができ、8 通りの向きで置けます。</p>
+              {PRIMITIVES.map((def) => (
+                <p key={def.id}>
+                  <strong>{def.name}</strong>：{PRIMITIVE_HELP[def.id]}
+                </p>
+              ))}
+            </>,
+          )}
           <div class="part-grid">
             {PRIMITIVES.filter(matches).map((def) => partButton(def))}
           </div>
-          {groups.length > 0
-            ? <span class="group-title">ライブラリ</span>
-            : null}
+          {groups.length > 0 ? groupTitle("ライブラリ") : null}
           {groups.map((g) => (
             <div key={g.stage.id}>
-              <span class="group-title sub">{g.stage.title}</span>
+              {groupTitle(
+                g.stage.title,
+                g.stage.id,
+                <>
+                  <p>{g.stage.description}</p>
+                  <p class="meta">
+                    <span>入力 {specList(g.stage.inputs)}</span>
+                    <span>出力 {specList(g.stage.outputs)}</span>
+                  </p>
+                </>,
+                true,
+              )}
               <div class="part-grid">
                 {g.components.map((def) => (
                   partButton(
@@ -1718,9 +1804,9 @@ export const Editor = island(
       );
     }
 
-    /** The stage's own explanation, folded away behind the ⓘ in the bar. */
+    /** This stage's own explanation, folded away behind the ⓘ in the bar. */
     function renderInfo(current: Stage): RemixNode {
-      if (!infoOpen) return null;
+      if (barPanel !== "info") return null;
       return (
         <div class="info-panel">
           <p>{current.description}</p>
@@ -1728,6 +1814,21 @@ export const Editor = island(
             <span>入力 {specList(current.inputs)}</span>
             <span>出力 {specList(current.outputs)}</span>
           </p>
+        </div>
+      );
+    }
+
+    /**
+     * How the editor works, behind the ? in the bar.
+     *
+     * The same on all 28 stages, which is why it is not printed under each stage's description:
+     * you read it once and then you are past it, and it was pushing the thing you opened the
+     * panel for off the top.
+     */
+    function renderHelp(): RemixNode {
+      if (barPanel !== "help") return null;
+      return (
+        <div class="info-panel">
           <p class="hint">
             配線ツールで盤面をドラッグすると線が引けます。端のマスから外のピンへ向かってドラッグすると、ピンにつながります。
             部品の端子（小さな四角が入力、丸が出力）へも同じように引きます。端子同士を隣接させれば配線なしでつながります。
@@ -1744,7 +1845,35 @@ export const Editor = island(
             で削除。キーは v 選択 / w 配線 / b バス / x 交差 / e 消去 / r 回転 /
             f 反転。
           </p>
+          <p class="hint">
+            すべては<a href={`${handle.props.base}/how-to-play`}>
+              遊び方
+            </a>にあります。
+          </p>
         </div>
+      );
+    }
+
+    /** ⓘ and ?, which differ only in which panel they drop and are exclusive with each other. */
+    function barButton(
+      which: "info" | "help",
+      label: string,
+      glyph: RemixNode,
+    ): RemixNode {
+      return (
+        <button
+          type="button"
+          class={`info${barPanel === which ? " active" : ""}`}
+          title={label}
+          aria-label={label}
+          aria-expanded={barPanel === which ? "true" : "false"}
+          mix={[on("click", () => {
+            barPanel = barPanel === which ? undefined : which;
+            handle.update();
+          })]}
+        >
+          {icon(glyph)}
+        </button>
       );
     }
 
@@ -2042,23 +2171,24 @@ export const Editor = island(
               <h1>{current.title}</h1>
               <span>{index + 1} / {STAGES.length}</span>
             </div>
-            <button
-              type="button"
-              class={`info${infoOpen ? " active" : ""}`}
-              title="このステージの説明"
-              mix={[on("click", () => {
-                infoOpen = !infoOpen;
-                handle.update();
-              })]}
-            >
-              {icon(
-                <>
-                  <circle cx="12" cy="12" r="9" />
-                  <path d="M12 11v5" />
-                  <path d="M12 7.6v.1" />
-                </>,
-              )}
-            </button>
+            {barButton(
+              "info",
+              "このステージの説明",
+              <>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 11v5" />
+                <path d="M12 7.6v.1" />
+              </>,
+            )}
+            {barButton(
+              "help",
+              "操作のしかた",
+              <>
+                <circle cx="12" cy="12" r="9" />
+                <path d="M9.6 9.4a2.5 2.5 0 1 1 2.9 2.5v1.4" />
+                <path d="M12.5 16.4v.1" />
+              </>,
+            )}
             <span class="spacer" />
             <span
               class={`pill result${allPassed ? " pass" : ""}`}
@@ -2107,6 +2237,7 @@ export const Editor = island(
             </nav>
           </header>
           {renderInfo(current)}
+          {renderHelp()}
           <div class="app-body">
             {renderTools()}
             <div class="board-col">

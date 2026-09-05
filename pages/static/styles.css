@@ -701,7 +701,9 @@ body:has(.editor) .site-main {
 /* ---- the parts tab --------------------------------------------------------------------------- */
 
 .parts .group-title {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
   margin: 0.9rem 0 0.4rem;
   font-size: 0.8rem;
   color: var(--muted);
@@ -714,6 +716,62 @@ body:has(.editor) .site-main {
 .parts .group-title.sub {
   margin: 0.6rem 0 0.3rem;
   font-size: 0.75rem;
+}
+
+/*
+ * The ⓘ beside a group's name. Small, and only coloured once it is doing something.
+ *
+ * The negative margin keeps a thumb-sized target from making the heading row taller than the
+ * text in it.
+ */
+.parts .group-title button {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  margin-block: -0.25rem;
+  padding: 0;
+  border: none;
+  border-radius: 0.3rem;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.parts .group-title button svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.parts .group-title button.active {
+  color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
+
+.group-info {
+  margin: 0 0 0.6rem;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--card);
+  font-size: 0.85rem;
+  text-wrap: pretty;
+}
+
+.group-info p {
+  margin: 0 0 0.4rem;
+}
+
+.group-info p:last-child {
+  margin-bottom: 0;
+}
+
+.group-info .meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  color: var(--muted);
 }
 
 .part-grid {
