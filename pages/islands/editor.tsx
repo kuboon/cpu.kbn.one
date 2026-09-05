@@ -1,4 +1,5 @@
 import { on } from "@remix-run/ui";
+import { animateEntrance, animateExit, spring } from "@remix-run/ui/animation";
 import type { Handle, RemixNode } from "@remix-run/ui";
 import { island } from "@kuboon/remix-ssg/client";
 
@@ -99,14 +100,38 @@ function clamp(value: number, low: number, high: number): number {
  * The lengths are tiered by how much the event matters — a part landing is not a stage clear.
  */
 const PULSE_MS: Record<string, number> = {
-  place: 260,
-  erase: 200,
   step: 200,
-  area: 420,
-  refuse: 400,
   register: 700,
   pass: 900,
 };
+
+/**
+ * Whether to skip the animations. The CSS ones sit behind a media query; the mixin ones are
+ * WAAPI and no query reaches them, so they are turned off here instead — passing `false` as the
+ * config leaves the element to appear and disappear with no animation at all.
+ */
+const still = (): boolean =>
+  globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+
+/** A part arriving on the board: squashed on contact, springing back to square. */
+const PART_ENTRANCE = () =>
+  animateEntrance(
+    still() ? false : {
+      opacity: 0.5,
+      transform: "scale(1.22, 0.78)",
+      ...spring("bouncy"),
+    },
+  );
+
+/** And leaving it. */
+const PART_EXIT = () =>
+  animateExit(
+    still() ? false : {
+      opacity: 0,
+      transform: "scale(0.8)",
+      ...spring("snappy"),
+    },
+  );
 
 /**
  * The stage editor: a board, a palette, live simulation and the stage's tests.
@@ -142,10 +167,10 @@ export const Editor = island(
     let recent: string[] = [];
     /** Responses playing right now, by token; each clears itself when its animation ends. */
     const pulses = new Map<string, number>();
-    /** The placement that just landed, so only that one pops. */
-    let landed: number | undefined;
     /** Whether the tests were all passing before the last edit, to catch the moment they start. */
     let wasPassing = false;
+    /** Which way the score last moved, so the number can arrive in the colour of that news. */
+    let areaMoved: "down" | "up" | undefined;
     let sortBy: "area" | "new" = "area";
     let search = "";
     let drag: Drag | undefined;
@@ -349,7 +374,6 @@ export const Editor = island(
         token,
         setTimeout(() => {
           pulses.delete(token);
-          if (token.startsWith("place:")) landed = undefined;
           handle.update();
         }, PULSE_MS[kind] ?? 300),
       );
@@ -376,16 +400,6 @@ export const Editor = island(
       wasPassing = passing;
     }
 
-    /** A placement: the same commit, plus the pop that says the part arrived. */
-    function land(next: Design | undefined, why?: string): void {
-      const before = design.placements.length;
-      commit(next, why);
-      if (design.placements.length > before) {
-        landed = design.placements.length - 1;
-        juice(`place:${landed}`);
-      }
-    }
-
     /** Applies an edit: `undefined` means it was refused, and `why` is shown instead. */
     function commit(next: Design | undefined, why?: string): void {
       if (next === undefined) {
@@ -402,7 +416,11 @@ export const Editor = island(
         rebuild();
         saveDraft();
         const after = area(design);
-        if (after !== before) juice(after < before ? "area:down" : "area:up");
+        areaMoved = after === before
+          ? undefined
+          : after < before
+          ? "down"
+          : "up";
         notePassing();
       }
       handle.update();
@@ -640,7 +658,7 @@ export const Editor = island(
           }
           drag = { kind: "idle" };
           remember(tool.componentId);
-          land(
+          commit(
             edit.addPlacement(design, library, {
               componentId: tool.componentId,
               ...p,
@@ -739,7 +757,7 @@ export const Editor = island(
         case "placing":
           if (hover !== undefined && edit.inBoard(design, hover)) {
             remember(finished.componentId);
-            land(
+            commit(
               edit.addPlacement(design, library, {
                 componentId: finished.componentId,
                 ...hover,
@@ -937,7 +955,7 @@ export const Editor = island(
           : 12;
       const cls = `part${def.primitive ? ` prim-${def.primitive}` : ""}${
         selected === index && !ghost ? " selected" : ""
-      }${index === landed && !ghost ? " landed" : ""}${
+      }${
         ghost
           ? (edit.canPlace(design, library, placement)
             ? " ghost"
@@ -946,7 +964,11 @@ export const Editor = island(
       }`;
       const vertical = def.primitive === "split" && height > width;
       return (
-        <g key={ghost ? "ghost" : `p${index}`} class={cls}>
+        <g
+          key={ghost ? "ghost" : `p${index}`}
+          class={cls}
+          mix={ghost ? [] : [PART_ENTRANCE(), PART_EXIT()]}
+        >
           <rect
             x={x + 2}
             y={y + 2}
@@ -1950,12 +1972,27 @@ export const Editor = island(
             >
               テスト {passed} / {tests.length}
             </span>
-            <span
-              class={`pill area${playing_("area:down") ? " down" : ""}${
-                playing_("area:up") ? " up" : ""
-              }`}
-            >
-              面積 <strong>{area(design)}</strong>
+            <span class="pill area">
+              面積{" "}
+              <strong
+                key={`area-${area(design)}`}
+                mix={[
+                  animateEntrance(
+                    still() ? false : {
+                      transform: "scale(1.4)",
+                      // Starts in the colour of the direction it moved and settles back.
+                      color: areaMoved === "down"
+                        ? "#16a34a"
+                        : areaMoved === "up"
+                        ? "#dc2626"
+                        : "currentColor",
+                      ...spring("bouncy"),
+                    },
+                  ),
+                ]}
+              >
+                {area(design)}
+              </strong>
               {target !== undefined ? <em>/ パー {target}</em> : null}
             </span>
             <nav class="stage-jump">
@@ -2016,7 +2053,25 @@ export const Editor = island(
                 {renderOrientBar()}
                 {message
                   ? (
-                    <p class={`message${playing_("refuse") ? " nudge" : ""}`}>
+                    <p
+                      key="message"
+                      class="message"
+                      mix={[
+                        animateEntrance(
+                          still() ? false : {
+                            opacity: 0,
+                            transform: "translateX(-10px)",
+                            ...spring("bouncy"),
+                          },
+                        ),
+                        animateExit(
+                          still() ? false : {
+                            opacity: 0,
+                            ...spring("snappy"),
+                          },
+                        ),
+                      ]}
+                    >
                       {message}
                     </p>
                   )

@@ -789,38 +789,25 @@ body:has(.editor) .site-main {
   color: #fff;
 }
 
+/* The entrance and exit mixins scale a placed part, which needs an origin to scale about. */
+.part {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 /* ---- game feel ------------------------------------------------------------------------------- */
 
 /*
- * Feedback for the moments that matter. Every response is transient — it plays once and the
- * element is back where it was; nothing here becomes a new resting state, and nothing here
- * touches the design or the simulation, only how a change announces itself.
+ * What is left here is the feedback that belongs to no single element: a tint across the whole
+ * board, or a loop with no beginning. Everything that is one element arriving or leaving — a
+ * part landing, the score changing, the refusal appearing — is an animateEntrance/animateExit
+ * mixin on that element instead, where the framework already knows the moment.
  *
- * Scaled to what happened: a part landing is a small beat, a stage clearing is the largest one
- * the editor has. Anyone who asks their system for less motion gets the state change with no
- * animation at all.
+ * These are transient the same way: each plays once and the element is back where it was, and
+ * anyone who asks their system for less motion gets the state change with no animation.
  */
 
 @media (prefers-reduced-motion: no-preference) {
-  /* A part arrives with weight: squashed on contact, overshooting back to square. */
-  .part.landed {
-    transform-box: fill-box;
-    transform-origin: center;
-    animation: part-land 260ms cubic-bezier(0.22, 1.4, 0.4, 1);
-  }
-
-  @keyframes part-land {
-    0% {
-      transform: scale(1.2, 0.8);
-    }
-    55% {
-      transform: scale(0.96, 1.04);
-    }
-    100% {
-      transform: scale(1, 1);
-    }
-  }
-
   /* An impossible placement already goes red; the pulse is what makes it register. */
   .part.ghost.bad {
     transform-box: fill-box;
@@ -884,35 +871,6 @@ body:has(.editor) .site-main {
     }
   }
 
-  /* The area is the score, so it is the one number worth animating. */
-  .pill.area.down strong,
-  .pill.area.up strong {
-    display: inline-block;
-    animation: score-pop 420ms cubic-bezier(0.22, 1.4, 0.4, 1);
-  }
-
-  @keyframes score-pop {
-    0% {
-      transform: scale(1);
-    }
-    35% {
-      transform: scale(1.35);
-    }
-    100% {
-      transform: scale(1);
-    }
-  }
-
-  .pill.area.down strong {
-    color: #16a34a;
-    transition: color 420ms ease-out;
-  }
-
-  .pill.area.up strong {
-    color: var(--short, #dc2626);
-    transition: color 420ms ease-out;
-  }
-
   /* All green: the two places that carry the result both take the hit. */
   .pill.result.struck,
   .test-bar.struck .mark {
@@ -940,30 +898,6 @@ body:has(.editor) .site-main {
 
   .test-bar.struck .mark {
     display: grid;
-  }
-
-  /* A refusal that only prints a sentence reads as nothing happening. */
-  .message.nudge {
-    animation: nudge 400ms ease-in-out;
-  }
-
-  @keyframes nudge {
-    0%,
-    100% {
-      transform: translateX(0);
-    }
-    15% {
-      transform: translateX(-5px);
-    }
-    35% {
-      transform: translateX(4px);
-    }
-    60% {
-      transform: translateX(-2px);
-    }
-    85% {
-      transform: translateX(1px);
-    }
   }
 
   /* A registered part arrives in the list rather than being there all along. */
