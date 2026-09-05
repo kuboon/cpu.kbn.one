@@ -20,3 +20,28 @@ jobs:
       # `mise run build` (the default) installs Deno and runs `deno task build`
       # in pages/ (see mise.toml), with BASE_URL set by the workflow.
       dist-dir: pages/dist
+
+  # Tell game-center to read the manifest again.
+  #
+  # The manifest is embedded in every page, so publishing it is not enough: the hub only sees a
+  # change when something asks it to look. This asks. There is nothing to authenticate — the hub
+  # fetches the URL itself, so no token or secret is involved — and the first registration was
+  # approved once by the named author, which is what lets later updates through.
+  #
+  # Main only. The same deployment carries every open PR's preview under a subpath, and pointing
+  # the hub at one of those would have it reading a branch instead of the site.
+  register:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: pages
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      # The site's own address, which lives in the Pages settings as a custom domain rather than
+      # in this repository — so it is written out here, and changing the domain means changing it.
+      - name: Re-register https://cpu.kbn.one/
+        run: |
+          curl --fail-with-body -sS -X POST \
+            https://ga-cen.kbn.one/api/registry/v1/games \
+            -H 'content-type: application/json' \
+            -d '{"url":"https://cpu.kbn.one/"}' \
+            -w '\nstatus=%{http_code}\n'
