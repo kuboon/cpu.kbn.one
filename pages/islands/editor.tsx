@@ -2,6 +2,8 @@ import { css, on } from "@remix-run/ui";
 import { animateEntrance, animateExit, spring } from "@remix-run/ui/animation";
 import type { Handle, RemixNode } from "@remix-run/ui";
 import { island } from "@kuboon/remix-ssg/client";
+import { createOnboardingTour } from "@kuboon/onboarding-kit/element";
+import type { OnboardingTourElement } from "@kuboon/onboarding-kit/element";
 
 import type {
   Cell,
@@ -45,6 +47,7 @@ import type { SaveData } from "../lib/game/storage.ts";
 import { ACHIEVEMENTS, earned } from "../lib/game/achievements.ts";
 import { claim, gameCenter, unlock } from "../lib/game/gamecenter.ts";
 import type { UnlockOutcome } from "../lib/game/gamecenter.ts";
+import { playTour } from "../lib/game/tour.ts";
 
 /** Pixels per cell in the SVG's own coordinates; the drawing scales to its container. */
 const CELL = 32;
@@ -110,6 +113,18 @@ function clamp(value: number, low: number, high: number): number {
  * getting it wrong fails silently — @remix-run/ui 0.8.0 renamed it from `rmx-document`.
  */
 const DOCUMENT_NAV = { "data-rmx-document": "" } as Record<string, string>;
+
+/**
+ * Marks an element as something the guided tour can point at.
+ *
+ * `data-*` is not in the JSX prop types either, so this goes in as a spread for the same reason
+ * `DOCUMENT_NAV` does. Names are the tour's half of a contract: `pages/lib/game/tour.ts` names
+ * them back, and the kit resolves each to the first *rendered* match — which is why the phone's
+ * test bar and the wide layout's result pill can both answer to `tests`.
+ */
+function tourTarget(name: string): Record<string, string> {
+  return { "data-tour": name };
+}
 
 const PULSE_MS: Record<string, number> = {
   step: 200,
@@ -259,8 +274,10 @@ export const Editor = island(
     let zoomedByHand = false;
     let panelOpen = false;
     let tab: Tab = "parts";
-    /** Which bar panel is down, if any. One at a time, so ⓘ and ? cannot stack. */
-    let barPanel: "info" | "help" | undefined = undefined;
+    /** Whether the ⓘ panel — this stage's own explanation — is down. */
+    let infoOpen = false;
+    /** The guided tour's overlay, mounted on the body the first time it is needed. */
+    let tourEl: OnboardingTourElement | undefined;
     /** Which parts group has its explanation open: "primitives", or a stage id. */
     let partInfo: string | undefined = undefined;
     /** The parts placed most recently, newest first; the shortcut row at the top of 部品. */
@@ -301,6 +318,11 @@ export const Editor = island(
 
     function viewport(): HTMLElement | null {
       return document.querySelector<HTMLElement>(".viewport");
+    }
+
+    /** Whether the wide layout is up: tools down a rail, panel open with the page, result in the bar. */
+    function isWide(): boolean {
+      return globalThis.matchMedia(`(min-width: ${WIDE}px)`).matches;
     }
 
     /** The zoom that would show the whole board, margin included, inside the viewport. */
@@ -593,11 +615,41 @@ export const Editor = island(
       save = loadSave() ?? emptySave();
       library = createLibrary(save.components);
       design = save.drafts[stage.id] ?? edit.defaultDesign(stage);
-      panelOpen = globalThis.matchMedia(`(min-width: ${WIDE}px)`).matches;
+      panelOpen = isWide();
       rebuild();
       notePassing(true);
       handle.update();
       requestAnimationFrame(fit);
+      mountTour();
+    }
+
+    /**
+     * Puts the tour's overlay on the body, and lets it decide whether this is a first visit.
+     *
+     * On the body rather than in the returned tree: it is a fixed, full-screen overlay that has to
+     * outlive any one render, and an element inside the tree would be torn down and rebuilt on
+     * every `handle.update()` — which is every keystroke of a tour that walks across a live
+     * editor. Assigning the scenario is what starts it; the kit's own store is what makes that
+     * happen once, on a first visit, and never again by itself.
+     */
+    function mountTour(): void {
+      if (typeof document === "undefined" || tourEl !== undefined) return;
+      const el = createOnboardingTour();
+      document.body.append(el);
+      handle.signal.addEventListener("abort", () => el.remove());
+      tourEl = el;
+      el.scenario = playTour(isWide());
+    }
+
+    /**
+     * The ?: the same tour again, from the top, however many times it is asked for.
+     *
+     * `force` walks past the record of having finished it without clearing that record, so asking
+     * for the tour today does not bring it back unbidden tomorrow.
+     */
+    function openTour(): void {
+      mountTour();
+      void tourEl?.start({ force: true });
     }
 
     /** A resize changes what fits, so refit — unless the player has set the zoom themselves. */
@@ -1230,6 +1282,7 @@ export const Editor = island(
           width={Math.round(w * scale)}
           height={Math.round(h * scale)}
           class={`board tool-${tool.kind}`}
+          {...tourTarget("board")}
           mix={[
             on("pointerdown", (event) => pointerDown(event as PointerEvent)),
             on("pointermove", (event) => pointerMove(event as PointerEvent)),
@@ -1804,9 +1857,14 @@ export const Editor = island(
       );
     }
 
-    /** This stage's own explanation, folded away behind the ⓘ in the bar. */
+    /**
+     * This stage's own explanation, folded away behind the ⓘ in the bar.
+     *
+     * It also carries the link out to the rules, which used to live in the ? panel: explanations
+     * are what this panel is for, and the editor page has no chrome of its own to hang it on.
+     */
     function renderInfo(current: Stage): RemixNode {
-      if (barPanel !== "info") return null;
+      if (!infoOpen) return null;
       return (
         <div class="info-panel">
           <p>{current.description}</p>
@@ -1814,39 +1872,8 @@ export const Editor = island(
             <span>入力 {specList(current.inputs)}</span>
             <span>出力 {specList(current.outputs)}</span>
           </p>
-        </div>
-      );
-    }
-
-    /**
-     * How the editor works, behind the ? in the bar.
-     *
-     * The same on all 28 stages, which is why it is not printed under each stage's description:
-     * you read it once and then you are past it, and it was pushing the thing you opened the
-     * panel for off the top.
-     */
-    function renderHelp(): RemixNode {
-      if (barPanel !== "help") return null;
-      return (
-        <div class="info-panel">
           <p class="hint">
-            配線ツールで盤面をドラッグすると線が引けます。端のマスから外のピンへ向かってドラッグすると、ピンにつながります。
-            部品の端子（小さな四角が入力、丸が出力）へも同じように引きます。端子同士を隣接させれば配線なしでつながります。
-          </p>
-          <p class="hint">
-            バスは 8 本をまとめた配線で、太く描かれます。1
-            本の配線とは直接つながらず、Bus split でばらします。
-            バスの入力ピンはクリックで 1
-            ずつ増え、テストのタブで値を直接入れられます。
-          </p>
-          <p class="hint">
-            入力ピンはクリックで
-            on/off。ピンは外周をドラッグで移動。部品は選択してドラッグで移動、Delete
-            で削除。キーは v 選択 / w 配線 / b バス / x 交差 / e 消去 / r 回転 /
-            f 反転。
-          </p>
-          <p class="hint">
-            すべては<a href={`${handle.props.base}/how-to-play`}>
+            詳しいルールは<a href={`${handle.props.base}/how-to-play`}>
               遊び方
             </a>にあります。
           </p>
@@ -1854,23 +1881,28 @@ export const Editor = island(
       );
     }
 
-    /** ⓘ and ?, which differ only in which panel they drop and are exclusive with each other. */
+    /**
+     * ⓘ and ?: the same round glyph button in the bar, with different jobs.
+     *
+     * ⓘ drops this stage's explanation. ? no longer drops anything — it reopens the guided tour,
+     * which says what its four paragraphs of text used to say, except beside the thing it is
+     * describing rather than above it.
+     */
     function barButton(
-      which: "info" | "help",
       label: string,
+      active: boolean,
+      press: () => void,
       glyph: RemixNode,
+      attrs: Record<string, string> = {},
     ): RemixNode {
       return (
         <button
           type="button"
-          class={`info${barPanel === which ? " active" : ""}`}
+          class={`info${active ? " active" : ""}`}
           title={label}
           aria-label={label}
-          aria-expanded={barPanel === which ? "true" : "false"}
-          mix={[on("click", () => {
-            barPanel = barPanel === which ? undefined : which;
-            handle.update();
-          })]}
+          {...attrs}
+          mix={[on("click", press)]}
         >
           {icon(glyph)}
         </button>
@@ -1917,7 +1949,7 @@ export const Editor = island(
 
     function renderTools(): RemixNode {
       return (
-        <div class="tools">
+        <div class="tools" {...tourTarget("tools")}>
           {dockButton(
             { kind: "select" },
             "選択",
@@ -1958,6 +1990,7 @@ export const Editor = island(
           <button
             type="button"
             class={`dock-button${tool.kind === "place" ? " active" : ""}`}
+            {...tourTarget("parts-button")}
             mix={[on("click", () => openPanel("parts"))]}
           >
             {icon(
@@ -2172,26 +2205,34 @@ export const Editor = island(
               <span>{index + 1} / {STAGES.length}</span>
             </div>
             {barButton(
-              "info",
               "このステージの説明",
+              infoOpen,
+              () => {
+                infoOpen = !infoOpen;
+                handle.update();
+              },
               <>
                 <circle cx="12" cy="12" r="9" />
                 <path d="M12 11v5" />
                 <path d="M12 7.6v.1" />
               </>,
+              { "aria-expanded": infoOpen ? "true" : "false" },
             )}
             {barButton(
-              "help",
-              "操作のしかた",
+              "操作のしかたを見る",
+              false,
+              openTour,
               <>
                 <circle cx="12" cy="12" r="9" />
                 <path d="M9.6 9.4a2.5 2.5 0 1 1 2.9 2.5v1.4" />
                 <path d="M12.5 16.4v.1" />
               </>,
+              tourTarget("help"),
             )}
             <span class="spacer" />
             <span
               class={`pill result${allPassed ? " pass" : ""}`}
+              {...tourTarget("tests")}
               mix={playing_("pass") ? [struck] : []}
             >
               テスト {passed} / {tests.length}
@@ -2237,7 +2278,6 @@ export const Editor = island(
             </nav>
           </header>
           {renderInfo(current)}
-          {renderHelp()}
           <div class="app-body">
             {renderTools()}
             <div class="board-col">
@@ -2309,6 +2349,7 @@ export const Editor = island(
               <button
                 type="button"
                 class={`test-bar${allPassed ? " pass" : ""}`}
+                {...tourTarget("tests")}
                 mix={[on("click", () => openPanel("tests"))]}
               >
                 <span class="mark" mix={playing_("pass") ? [struck] : []}>

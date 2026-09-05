@@ -69,6 +69,8 @@
   "imports": {
     "@kuboon/game-center-sdk": "jsr:@kuboon/game-center-sdk@^0.4.0",
     "@kuboon/md": "jsr:@kuboon/md@^0.3.0",
+    "@kuboon/onboarding-kit": "jsr:@kuboon/onboarding-kit@^0.2.0",
+    "@kuboon/onboarding-kit/element": "jsr:@kuboon/onboarding-kit@^0.2.0/element",
     "@kuboon/md/hast_to_remix.ts": "jsr:@kuboon/md@^0.3.0/hast_to_remix.ts",
     "@kuboon/remix-ssg": "jsr:@kuboon/remix-ssg@^0.8.0",
     "@remix-run/ui": "npm:@remix-run/ui@^0.8.0",
