@@ -2,8 +2,6 @@ import { on } from "@remix-run/ui";
 import type { Handle, RemixNode } from "@remix-run/ui";
 import { island } from "@kuboon/remix-ssg/client";
 
-import { Link } from "../lib/link.tsx";
-
 import type { ComponentDef } from "../lib/game/model.ts";
 import { STAGES } from "../lib/game/stages/index.ts";
 import { loadSave, storeSave } from "../lib/game/browser-storage.ts";
@@ -166,11 +164,11 @@ export const Library = island(
           {groups.length === 0
             ? (
               <p>
-                まだ部品がありません。<Link
+                まだ部品がありません。<a
                   href={current ? `${handle.props.base || ""}/` : "/"}
                 >
                   ステージ
-                </Link>をクリアして登録すると、ここに並びます。
+                </a>をクリアして登録すると、ここに並びます。
               </p>
             )
             : groups.map((g) => (

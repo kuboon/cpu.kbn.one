@@ -13,7 +13,6 @@ import { css } from "@remix-run/ui";
 import type { Handle, RemixNode } from "@remix-run/ui";
 
 import { base } from "../lib/base.ts";
-import { Link } from "../lib/link.tsx";
 import { BoardArt, SizeGlyph } from "../lib/board-art.tsx";
 import { REFERENCES } from "../lib/game/reference.ts";
 import { par } from "../lib/game/reference.ts";
@@ -464,10 +463,10 @@ export default function Home(): RemixNode {
             マス目の盤面にリレーと配線を置いて回路を作る。できた回路は部品として登録でき、作ったときの大きさのまま次のステージで使える。スコアは盤面の面積。小さいほどよい。
           </p>
           <div mix={[actions]}>
-            <Link href={`${base}/play/not`} class="button">NOT から始める</Link>
-            <Link href={`${base}/how-to-play`} class="button ghost">
+            <a href={`${base}/play/not`} class="button">NOT から始める</a>
+            <a href={`${base}/how-to-play`} class="button ghost">
               遊び方を読む
-            </Link>
+            </a>
           </div>
           <p mix={[fine]}>
             {STAGES.length}{" "}
@@ -630,7 +629,7 @@ export default function Home(): RemixNode {
             ))}
           </div>
           <p style="margin:1.5rem 0 0">
-            <Link href={`${base}/stages`}>ステージ一覧と自己ベスト</Link>
+            <a href={`${base}/stages`}>ステージ一覧と自己ベスト</a>
           </p>
         </div>
       </section>
@@ -669,7 +668,7 @@ export default function Home(): RemixNode {
             {" "}
             {STAGES.length} 段のぼると CPU になる。
           </p>
-          <Link href={`${base}/play/not`} class="button">NOT から始める</Link>
+          <a href={`${base}/play/not`} class="button">NOT から始める</a>
         </div>
       </section>
     </div>

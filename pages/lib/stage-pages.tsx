@@ -25,17 +25,21 @@ export function stagePages(
   return {
     basePath: joinBase(base, "/play"),
 
-    async fetch(request: Request): Promise<Response> {
+    // Nothing here waits for anything — `renderPage` hands back a streaming response — but the
+    // middleware contract is async, so the answers are wrapped rather than the function marked.
+    fetch(request: Request): Promise<Response> {
       const pathname = decodeURIComponent(new URL(request.url).pathname);
       const index = STAGES.findIndex((s) => pathOf(s.id) === pathname);
       const stage = STAGES[index];
       if (stage === undefined) {
-        return new Response("Not Found", {
-          status: 404,
-          headers: { "content-type": "text/plain; charset=utf-8" },
-        });
+        return Promise.resolve(
+          new Response("Not Found", {
+            status: 404,
+            headers: { "content-type": "text/plain; charset=utf-8" },
+          }),
+        );
       }
-      const body = await renderPage({
+      return Promise.resolve(renderPage({
         title: `${stage.title} — ${SITE_NAME}`,
         description: stage.description,
         base,
@@ -43,10 +47,7 @@ export function stagePages(
         // The editor fills the viewport and carries its own bar, links to the neighbouring
         // stages included, so the page adds no chrome of its own.
         children: <Editor base={base} stageId={stage.id} />,
-      });
-      return new Response(body, {
-        headers: { "content-type": "text/html; charset=utf-8" },
-      });
+      }));
     },
 
     *paths(): Iterable<string> {

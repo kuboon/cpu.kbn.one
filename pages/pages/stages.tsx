@@ -8,7 +8,6 @@
 import type { RemixNode } from "@remix-run/ui";
 
 import { base } from "../lib/base.ts";
-import { Link } from "../lib/link.tsx";
 import { STAGES } from "../lib/game/stages/index.ts";
 import { par } from "../lib/game/reference.ts";
 import { Progress } from "../islands/progress.tsx";
@@ -35,7 +34,7 @@ export default function Stages(): RemixNode {
         ステージ名を押すとエディタが開く。進み具合はこのブラウザに保存される。
       </p>
       <p>
-        ルールは<Link href={`${base}/how-to-play`}>遊び方</Link>にある。
+        ルールは<a href={`${base}/how-to-play`}>遊び方</a>にある。
       </p>
       <table class="stages">
         <thead>
@@ -53,9 +52,9 @@ export default function Stages(): RemixNode {
             <tr key={stage.id}>
               <td>{i + 1}</td>
               <td>
-                <Link href={`${base}/play/${stage.id}`}>
+                <a href={`${base}/play/${stage.id}`}>
                   <strong>{stage.title}</strong>
-                </Link>
+                </a>
                 <br />
                 <small>{stage.description}</small>
               </td>

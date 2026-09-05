@@ -25,22 +25,19 @@ export function markdown(context: { base: string }): FileTransform {
       const doc = parseDocument(slug, await Deno.readTextFile(file.url));
       const body = await renderMarkdown(doc.body);
 
-      return {
-        body: await renderPage({
-          title: `${doc.title} — ${SITE_NAME}`,
-          description: doc.summary,
-          base: context.base,
-          islandUrls: {},
-          children: (
-            <article class="post">
-              <h1>{doc.title}</h1>
-              {doc.date ? <time datetime={doc.date}>{doc.date}</time> : null}
-              {body}
-            </article>
-          ),
-        }),
-        contentType: "text/html; charset=utf-8",
-      };
+      return renderPage({
+        title: `${doc.title} — ${SITE_NAME}`,
+        description: doc.summary,
+        base: context.base,
+        islandUrls: {},
+        children: (
+          <article class="post">
+            <h1>{doc.title}</h1>
+            {doc.date ? <time datetime={doc.date}>{doc.date}</time> : null}
+            {body}
+          </article>
+        ),
+      });
     },
   };
 }

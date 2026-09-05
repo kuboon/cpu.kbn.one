@@ -49,16 +49,13 @@ export function page(
         islandUrls[name] = chunk;
       }
 
-      return {
-        body: await renderPage({
-          title: module.title ?? file.path,
-          description: module.description,
-          base: context.base,
-          islandUrls,
-          children: await module.default(),
-        }),
-        contentType: "text/html; charset=utf-8",
-      };
+      return renderPage({
+        title: module.title ?? file.path,
+        description: module.description,
+        base: context.base,
+        islandUrls,
+        children: await module.default(),
+      });
     },
   };
 }
