@@ -39,16 +39,33 @@ body {
   padding-inline: 1.25rem;
 }
 
+/*
+ * The landing page runs its sections edge to edge — each one holds its own contents to a width —
+ * so the shell steps out of the way and only the header and footer keep a measure, widened to
+ * match the sections below them.
+ */
+body:has(.landing) .site-main {
+  max-width: none;
+  padding: 0;
+}
+
+body:has(.landing) .site-header,
+body:has(.landing) .site-footer {
+  max-width: 68rem;
+}
+
 .site-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 1rem;
   padding-block: 1.25rem;
   border-bottom: 1px solid var(--border);
 }
 
 .brand {
+  white-space: nowrap;
   font-weight: 700;
   font-size: 1.1rem;
   text-decoration: none;
@@ -58,6 +75,17 @@ body {
 .site-nav {
   display: flex;
   gap: 1rem;
+}
+
+/* Narrow enough and the nav has to wrap; wrap between the links, not inside their words. */
+.site-nav a {
+  white-space: nowrap;
+}
+
+@media (max-width: 26rem) {
+  .site-nav {
+    gap: 0.7rem;
+  }
 }
 
 .site-main {
@@ -86,15 +114,32 @@ a {
   color: var(--muted);
 }
 
+/*
+ * A link that acts as a button, sized to match the editor's own controls.
+ *
+ * It lives here rather than beside the page that uses it because `a { color: var(--accent) }`
+ * above is unlayered, and a `css()` mixin is not: layer order beats specificity, so a colour
+ * declared in a mixin would lose to it and the label would come out blue on blue.
+ */
 .button {
-  display: inline-block;
-  margin-top: 0.5rem;
-  padding: 0.6rem 1rem;
-  border-radius: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 3rem;
+  padding: 0 1.5rem;
+  border: 1px solid var(--accent);
+  border-radius: 0.6rem;
   background: var(--accent);
-  color: #fff;
+  /* Not #fff: the dark theme's accent is a light blue, and white on it is barely readable. */
+  color: var(--bg);
   text-decoration: none;
   font-weight: 600;
+}
+
+.button.ghost {
+  background: var(--card);
+  border-color: var(--border);
+  color: var(--fg);
 }
 
 code {
