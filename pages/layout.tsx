@@ -5,18 +5,17 @@
  * name to the chunk the bundler emitted, plus the scripts that load them. A page that places no
  * island gets neither, and so ships no JavaScript at all.
  *
- * It renders through `renderToStream`, and the difference from `renderToString` is not buffering:
- * `renderToString` is `renderToStream` with `stripFlushMarkers()` over the result. That marker,
- * `<!-- rmx:flush document -->`, is how the client runtime recognises a whole document. On a page
- * that has islands the runtime turns every internal `<a>` click into a frame navigation, fetches
- * the destination, and swaps the document only when the marker is there; strip it and the URL
- * changes while the page does not, with nothing logged anywhere. Keeping it is what lets a plain
- * `<a href>` navigate correctly whether or not the page it sits on has islands.
+ * `htmlDocument` is what turns the tree below into a response: the doctype, the content type, and
+ * — the part that matters here — `renderToStream` rather than `renderToString`. The runtime turns
+ * every internal `<a>` click into a frame navigation and swaps the document only when it finds
+ * `<!-- rmx:flush document -->` at the end, which `renderToString` strips; without it the URL
+ * changes while the page does not, with no error anywhere. Going through the helper is what keeps
+ * a plain `<a href>` working on a page with islands as well as on one without.
  */
 
-import { renderToStream } from "@remix-run/ui/server";
 import type { RemixNode } from "@remix-run/ui";
 import { ISLAND_MAP_ELEMENT_ID } from "@kuboon/remix-ssg/client";
+import { htmlDocument } from "@kuboon/remix-ssg/site";
 
 import { manifest } from "./lib/game/achievements.ts";
 
@@ -37,14 +36,14 @@ export const SITE_NAME = "Minimum CPU";
  * Renders a page inside the document shell.
  *
  * @param props The page's title, prefix, islands and body
- * @returns The complete HTML document
+ * @returns The response to serve for this page
  */
-export async function renderPage(props: LayoutProps): Promise<string> {
+export function renderPage(props: LayoutProps): Response {
   const { base, islandUrls } = props;
   const chunks = [...new Set(Object.values(islandUrls))];
   const home = base === "" ? "/" : base;
 
-  const stream = renderToStream(
+  return htmlDocument(
     <html lang="ja">
       <head>
         <meta charset="utf-8" />
@@ -89,13 +88,5 @@ export async function renderPage(props: LayoutProps): Promise<string> {
           : null}
       </body>
     </html>,
-    {
-      onError(error) {
-        throw error;
-      },
-    },
   );
-  const html = await new Response(stream).text();
-
-  return `<!DOCTYPE html>${html}`;
 }
