@@ -789,6 +789,205 @@ body:has(.editor) .site-main {
   color: #fff;
 }
 
+/* ---- game feel ------------------------------------------------------------------------------- */
+
+/*
+ * Feedback for the moments that matter. Every response is transient — it plays once and the
+ * element is back where it was; nothing here becomes a new resting state, and nothing here
+ * touches the design or the simulation, only how a change announces itself.
+ *
+ * Scaled to what happened: a part landing is a small beat, a stage clearing is the largest one
+ * the editor has. Anyone who asks their system for less motion gets the state change with no
+ * animation at all.
+ */
+
+@media (prefers-reduced-motion: no-preference) {
+  /* A part arrives with weight: squashed on contact, overshooting back to square. */
+  .part.landed {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: part-land 260ms cubic-bezier(0.22, 1.4, 0.4, 1);
+  }
+
+  @keyframes part-land {
+    0% {
+      transform: scale(1.2, 0.8);
+    }
+    55% {
+      transform: scale(0.96, 1.04);
+    }
+    100% {
+      transform: scale(1, 1);
+    }
+  }
+
+  /* An impossible placement already goes red; the pulse is what makes it register. */
+  .part.ghost.bad {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: ghost-refuse 700ms ease-in-out infinite;
+  }
+
+  @keyframes ghost-refuse {
+    0%,
+    100% {
+      transform: scale(1);
+    }
+    50% {
+      transform: scale(1.04);
+    }
+  }
+
+  /* Clearing a stage: the board answers as a whole, and the current down every lit wire. */
+  .board.cleared .board-bg {
+    animation: board-clear 900ms ease-out;
+  }
+
+  @keyframes board-clear {
+    0% {
+      fill: color-mix(in srgb, #16a34a 40%, var(--card));
+    }
+    60% {
+      fill: color-mix(in srgb, #16a34a 12%, var(--card));
+    }
+    100% {
+      fill: var(--card);
+    }
+  }
+
+  .board.cleared .wire.on,
+  .board.cleared .pin.on circle {
+    animation: surge 900ms ease-out;
+  }
+
+  @keyframes surge {
+    0%,
+    25% {
+      stroke-width: 8;
+    }
+    100% {
+      stroke-width: 4;
+    }
+  }
+
+  /* One beat per test step, so ▶ 再生 reads as something running. */
+  .board.stepped .board-bg {
+    animation: step-beat 200ms ease-out;
+  }
+
+  @keyframes step-beat {
+    0% {
+      fill: color-mix(in srgb, var(--accent) 14%, var(--card));
+    }
+    100% {
+      fill: var(--card);
+    }
+  }
+
+  /* The area is the score, so it is the one number worth animating. */
+  .pill.area.down strong,
+  .pill.area.up strong {
+    display: inline-block;
+    animation: score-pop 420ms cubic-bezier(0.22, 1.4, 0.4, 1);
+  }
+
+  @keyframes score-pop {
+    0% {
+      transform: scale(1);
+    }
+    35% {
+      transform: scale(1.35);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .pill.area.down strong {
+    color: #16a34a;
+    transition: color 420ms ease-out;
+  }
+
+  .pill.area.up strong {
+    color: var(--short, #dc2626);
+    transition: color 420ms ease-out;
+  }
+
+  /* All green: the two places that carry the result both take the hit. */
+  .pill.result.struck,
+  .test-bar.struck .mark {
+    animation: struck 900ms cubic-bezier(0.22, 1.4, 0.4, 1);
+  }
+
+  @keyframes struck {
+    0% {
+      transform: scale(1);
+    }
+    18% {
+      transform: scale(1.28);
+    }
+    45% {
+      transform: scale(0.98);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .pill.result.struck {
+    display: inline-flex;
+  }
+
+  .test-bar.struck .mark {
+    display: grid;
+  }
+
+  /* A refusal that only prints a sentence reads as nothing happening. */
+  .message.nudge {
+    animation: nudge 400ms ease-in-out;
+  }
+
+  @keyframes nudge {
+    0%,
+    100% {
+      transform: translateX(0);
+    }
+    15% {
+      transform: translateX(-5px);
+    }
+    35% {
+      transform: translateX(4px);
+    }
+    60% {
+      transform: translateX(-2px);
+    }
+    85% {
+      transform: translateX(1px);
+    }
+  }
+
+  /* A registered part arrives in the list rather than being there all along. */
+  .part-card.arrived {
+    animation: arrive 700ms cubic-bezier(0.22, 1.2, 0.4, 1);
+  }
+
+  @keyframes arrive {
+    0% {
+      transform: translateY(10px) scale(0.94);
+      opacity: 0;
+      border-color: var(--accent);
+    }
+    40% {
+      border-color: var(--accent);
+      background: color-mix(in srgb, var(--accent) 14%, transparent);
+    }
+    100% {
+      transform: translateY(0) scale(1);
+      opacity: 1;
+    }
+  }
+}
+
 /* ---- the board tab --------------------------------------------------------------------------- */
 
 /* The row and column a − would take. The rule is invisible until you can see what it picks. */

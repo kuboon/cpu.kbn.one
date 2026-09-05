@@ -92,6 +92,23 @@ function clamp(value: number, low: number, high: number): number {
 }
 
 /**
+ * How long each kind of response stays on the element, in ms.
+ *
+ * Feedback is transient: the class goes on, the animation plays once, the class comes off and
+ * the element is back at rest. Anything that stays becomes the new normal and stops reading.
+ * The lengths are tiered by how much the event matters — a part landing is not a stage clear.
+ */
+const PULSE_MS: Record<string, number> = {
+  place: 260,
+  erase: 200,
+  step: 200,
+  area: 420,
+  refuse: 400,
+  register: 700,
+  pass: 900,
+};
+
+/**
  * The stage editor: a board, a palette, live simulation and the stage's tests.
  *
  * The server render is a placeholder: the draft and the registered components live in the
@@ -123,6 +140,12 @@ export const Editor = island(
     let infoOpen = false;
     /** The parts placed most recently, newest first; the shortcut row at the top of 部品. */
     let recent: string[] = [];
+    /** Responses playing right now, by token; each clears itself when its animation ends. */
+    const pulses = new Map<string, number>();
+    /** The placement that just landed, so only that one pops. */
+    let landed: number | undefined;
+    /** Whether the tests were all passing before the last edit, to catch the moment they start. */
+    let wasPassing = false;
     let sortBy: "area" | "new" = "area";
     let search = "";
     let drag: Drag | undefined;
@@ -243,6 +266,7 @@ export const Editor = island(
       storeSave(save);
       registered = trimmed;
       unlocked = [];
+      juice("register");
       handle.update();
       awardAchievements(stage.id, area(design));
     }
@@ -312,17 +336,64 @@ export const Editor = island(
       );
     }
 
+    /**
+     * Plays one response. The token is off, then on, then off again, so the animation restarts
+     * even when the element was already on screen; a repeat of the same token replaces it rather
+     * than stacking. Nothing here touches the design or the simulation.
+     */
+    function juice(token: string): void {
+      const kind = token.split(":")[0];
+      const running = pulses.get(token);
+      if (running !== undefined) clearTimeout(running);
+      pulses.set(
+        token,
+        setTimeout(() => {
+          pulses.delete(token);
+          if (token.startsWith("place:")) landed = undefined;
+          handle.update();
+        }, PULSE_MS[kind] ?? 300),
+      );
+    }
+
+    function playing_(token: string): boolean {
+      return pulses.has(token);
+    }
+
     /** Moves a part to the front of the shortcut row, keeping the four most recent. */
     function remember(componentId: string): void {
       recent = [componentId, ...recent.filter((id) => id !== componentId)]
         .slice(0, 4);
     }
 
+    /**
+     * Marks whether the tests are green, and fires the clear once on the way in.
+     * `quiet` records the state without announcing it, for a draft that loads already green.
+     */
+    function notePassing(quiet = false): void {
+      const passing = problems.length === 0 && tests.length > 0 &&
+        tests.every((t) => t.ok);
+      if (passing && !wasPassing && !quiet) juice("pass");
+      wasPassing = passing;
+    }
+
+    /** A placement: the same commit, plus the pop that says the part arrived. */
+    function land(next: Design | undefined, why?: string): void {
+      const before = design.placements.length;
+      commit(next, why);
+      if (design.placements.length > before) {
+        landed = design.placements.length - 1;
+        juice(`place:${landed}`);
+      }
+    }
+
     /** Applies an edit: `undefined` means it was refused, and `why` is shown instead. */
     function commit(next: Design | undefined, why?: string): void {
       if (next === undefined) {
         message = why;
+        // A refusal that only prints a sentence reads as nothing happening.
+        juice("refuse");
       } else if (next !== design) {
+        const before = area(design);
         history = [...history.slice(-99), design];
         design = next;
         message = undefined;
@@ -330,6 +401,9 @@ export const Editor = island(
         shown = undefined;
         rebuild();
         saveDraft();
+        const after = area(design);
+        if (after !== before) juice(after < before ? "area:down" : "area:up");
+        notePassing();
       }
       handle.update();
     }
@@ -341,6 +415,7 @@ export const Editor = island(
       selected = undefined;
       rebuild();
       saveDraft();
+      notePassing();
       handle.update();
     }
 
@@ -361,6 +436,7 @@ export const Editor = island(
         inputs = { ...inputs, ...stage.steps[i].set };
         live = sim.evaluate(stage.steps[i].set);
       }
+      juice("step");
       handle.update();
     }
 
@@ -401,6 +477,7 @@ export const Editor = island(
       design = save.drafts[stage.id] ?? edit.defaultDesign(stage);
       panelOpen = globalThis.matchMedia(`(min-width: ${WIDE}px)`).matches;
       rebuild();
+      notePassing(true);
       handle.update();
       requestAnimationFrame(fit);
     }
@@ -563,7 +640,7 @@ export const Editor = island(
           }
           drag = { kind: "idle" };
           remember(tool.componentId);
-          commit(
+          land(
             edit.addPlacement(design, library, {
               componentId: tool.componentId,
               ...p,
@@ -662,7 +739,7 @@ export const Editor = island(
         case "placing":
           if (hover !== undefined && edit.inBoard(design, hover)) {
             remember(finished.componentId);
-            commit(
+            land(
               edit.addPlacement(design, library, {
                 componentId: finished.componentId,
                 ...hover,
@@ -860,7 +937,7 @@ export const Editor = island(
           : 12;
       const cls = `part${def.primitive ? ` prim-${def.primitive}` : ""}${
         selected === index && !ghost ? " selected" : ""
-      }${
+      }${index === landed && !ghost ? " landed" : ""}${
         ghost
           ? (edit.canPlace(design, library, placement)
             ? " ghost"
@@ -1033,7 +1110,9 @@ export const Editor = island(
           viewBox={`0 0 ${w} ${h}`}
           width={Math.round(w * scale)}
           height={Math.round(h * scale)}
-          class={`board tool-${tool.kind}`}
+          class={`board tool-${tool.kind}${playing_("pass") ? " cleared" : ""}${
+            playing_("step") ? " stepped" : ""
+          }`}
           mix={[
             on("pointerdown", (event) => pointerDown(event as PointerEvent)),
             on("pointermove", (event) => pointerMove(event as PointerEvent)),
@@ -1138,11 +1217,14 @@ export const Editor = island(
     /** `smallest` marks the tightest build of a function, which is the one worth reaching for. */
     function partButton(def: ComponentDef, smallest = false): RemixNode {
       const active = tool.kind === "place" && tool.componentId === def.id;
+      const arrived = playing_("register") && def.name === registered;
       return (
         <button
           key={def.id}
           type="button"
-          class={`part-card${active ? " active" : ""}`}
+          class={`part-card${active ? " active" : ""}${
+            arrived ? " arrived" : ""
+          }`}
           mix={[on("click", () => {
             tool = { kind: "place", componentId: def.id };
             selected = undefined;
@@ -1861,10 +1943,18 @@ export const Editor = island(
               )}
             </button>
             <span class="spacer" />
-            <span class={`pill result${allPassed ? " pass" : ""}`}>
+            <span
+              class={`pill result${allPassed ? " pass" : ""}${
+                playing_("pass") ? " struck" : ""
+              }`}
+            >
               テスト {passed} / {tests.length}
             </span>
-            <span class="pill">
+            <span
+              class={`pill area${playing_("area:down") ? " down" : ""}${
+                playing_("area:up") ? " up" : ""
+              }`}
+            >
               面積 <strong>{area(design)}</strong>
               {target !== undefined ? <em>/ パー {target}</em> : null}
             </span>
@@ -1924,7 +2014,13 @@ export const Editor = island(
                   </button>
                 </div>
                 {renderOrientBar()}
-                {message ? <p class="message">{message}</p> : null}
+                {message
+                  ? (
+                    <p class={`message${playing_("refuse") ? " nudge" : ""}`}>
+                      {message}
+                    </p>
+                  )
+                  : null}
               </div>
               <div class="status">
                 <span>{design.width} × {design.height} マス</span>
@@ -1932,7 +2028,9 @@ export const Editor = island(
               </div>
               <button
                 type="button"
-                class={`test-bar${allPassed ? " pass" : ""}`}
+                class={`test-bar${allPassed ? " pass" : ""}${
+                  playing_("pass") ? " struck" : ""
+                }`}
                 mix={[on("click", () => openPanel("tests"))]}
               >
                 <span class="mark">{allPassed ? "✓" : "…"}</span>
