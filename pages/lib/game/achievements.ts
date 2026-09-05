@@ -101,7 +101,15 @@ export const ACHIEVEMENTS: readonly Achievement[] = [
 ];
 
 /** The manifest the hub reads from the page. */
-export function manifest(): Record<string, unknown> {
+/**
+ * The manifest game-center reads.
+ *
+ * @param icon Where the game's icon is served. The hub resolves it against the page the manifest
+ *   is embedded in, and that page is a different one on every route, so this has to be rooted
+ *   rather than relative — the shell passes the same value it gives `<link rel="icon">`.
+ * @returns The manifest, matching https://ga-cen.kbn.one/schema/gamecenter.json
+ */
+export function manifest(icon: string): Record<string, unknown> {
   return {
     "$schema": "https://ga-cen.kbn.one/schema/gamecenter.json",
     id: GAME_CENTER_SLUG,
@@ -109,6 +117,7 @@ export function manifest(): Record<string, unknown> {
     title: "Minimum CPU",
     description:
       "リレーから CPU までを、できるだけ小さい面積で組み上げるパズル",
+    icon,
     achievements: ACHIEVEMENTS,
   };
 }
