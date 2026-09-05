@@ -4,6 +4,7 @@
     "jsr:@deno/loader@0.5": "0.5.0",
     "jsr:@kuboon/game-center-sdk@0.4": "0.4.0",
     "jsr:@kuboon/md@0.3": "0.3.0",
+    "jsr:@kuboon/onboarding-kit@0.2": "0.2.0",
     "jsr:@kuboon/remix-assets-deno@~0.4.2": "0.4.2",
     "jsr:@kuboon/remix-ssg@*": "0.8.0",
     "jsr:@kuboon/remix-ssg@0.8": "0.8.0",
@@ -70,6 +71,9 @@
         "npm:unified",
         "npm:unist-util-visit"
       ]
+    },
+    "@kuboon/onboarding-kit@0.2.0": {
+      "integrity": "29f33f17788e745b372b43775f8e8b3e91bccda0a5600bf81313163403816d16"
     },
     "@kuboon/remix-assets-deno@0.4.2": {
       "integrity": "063b00ce77219565282a4a874ba971d52ec1b95e831f9314dcccdbca1256a99f",
@@ -1138,6 +1142,7 @@
     "dependencies": [
       "jsr:@kuboon/game-center-sdk@0.4",
       "jsr:@kuboon/md@0.3",
+      "jsr:@kuboon/onboarding-kit@0.2",
       "jsr:@kuboon/remix-ssg@0.8",
       "jsr:@std/assert@^1.0.13",
       "jsr:@std/front-matter@^1.0.9",
