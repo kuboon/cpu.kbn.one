@@ -353,6 +353,11 @@ body:has(.editor) .site-main {
   gap: 1rem;
 }
 
+.info-panel .hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 .app-body {
   flex: 1;
   min-height: 0;
