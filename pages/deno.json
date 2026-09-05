@@ -67,16 +67,16 @@
     "jsxImportSource": "@remix-run/ui"
   },
   "imports": {
-    "@remix-run/ui": "npm:@remix-run/ui@^0.8.0",
-    "@remix-run/ui/server": "npm:@remix-run/ui@^0.8.0/server",
-    "@kuboon/remix-ssg": "jsr:@kuboon/remix-ssg@^0.7.0",
+    "@kuboon/game-center-sdk": "jsr:@kuboon/game-center-sdk@^0.4.0",
     "@kuboon/md": "jsr:@kuboon/md@^0.3.0",
     "@kuboon/md/hast_to_remix.ts": "jsr:@kuboon/md@^0.3.0/hast_to_remix.ts",
-    "@std/front-matter": "jsr:@std/front-matter@^1.0.9",
-    "@std/path": "jsr:@std/path@^1.1.6",
+    "@kuboon/remix-ssg": "jsr:@kuboon/remix-ssg@^0.7.0",
+    "@remix-run/ui": "npm:@remix-run/ui@^0.8.0",
+    "@remix-run/ui/animation": "npm:@remix-run/ui@^0.8.0/animation",
+    "@remix-run/ui/server": "npm:@remix-run/ui@^0.8.0/server",
     "@std/assert": "jsr:@std/assert@^1.0.13",
-    "@kuboon/game-center-sdk": "jsr:@kuboon/game-center-sdk@^0.4.0",
-    "@remix-run/ui/animation": "npm:@remix-run/ui@^0.8.0/animation"
+    "@std/front-matter": "jsr:@std/front-matter@^1.0.9",
+    "@std/path": "jsr:@std/path@^1.1.6"
   },
   "fmt": {
     "exclude": [
