@@ -2142,7 +2142,7 @@ export const Editor = island(
         return (
           <p>
             ステージ「{missing}」はありません。<a
-              href={handle.props.base || "/"}
+              href={`${handle.props.base}/stages`}
             >
               ステージ一覧へ
             </a>
@@ -2163,7 +2163,8 @@ export const Editor = island(
           class={`editor tab-${tab}${panelOpen ? " panel-open" : ""}`}
         >
           <header class="app-bar">
-            <a class="back" href={base || "/"}>
+            {/* The list is at /stages; the landing page is what the brand in the shell goes to. */}
+            <a class="back" href={`${base}/stages`}>
               {icon(<path d="M15 5l-7 7 7 7" />)}
               <span>ステージ一覧</span>
             </a>
