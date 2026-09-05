@@ -1,4 +1,4 @@
-import { on } from "@remix-run/ui";
+import { css, on } from "@remix-run/ui";
 import { animateEntrance, animateExit, spring } from "@remix-run/ui/animation";
 import type { Handle, RemixNode } from "@remix-run/ui";
 import { island } from "@kuboon/remix-ssg/client";
@@ -132,6 +132,91 @@ const PART_EXIT = () =>
       ...spring("snappy"),
     },
   );
+
+/*
+ * The three responses below belong to no single element — a tint across the whole board, or a
+ * loop with no beginning — so there is no insertion for an entrance mixin to hang on and they
+ * stay CSS. Each carries its own reduced-motion guard, the way the library's own components do.
+ */
+
+/** The wash the moment the tests first come green: the largest response the editor has. */
+const boardCleared = css({
+  "@keyframes board-clear": {
+    "0%": { fill: "color-mix(in srgb, #16a34a 40%, var(--card))" },
+    "60%": { fill: "color-mix(in srgb, #16a34a 12%, var(--card))" },
+    "100%": { fill: "var(--card)" },
+  },
+  "@keyframes surge": {
+    "0%": { strokeWidth: 8 },
+    "25%": { strokeWidth: 8 },
+    "100%": { strokeWidth: 4 },
+  },
+  "@media (prefers-reduced-motion: no-preference)": {
+    "& .board-bg": { animation: "board-clear 900ms ease-out" },
+    "& .wire.on": { animation: "surge 900ms ease-out" },
+    "& .pin.on circle": { animation: "surge 900ms ease-out" },
+  },
+});
+
+/** One beat per test step, so ▶ 再生 reads as something running. */
+const boardStepped = css({
+  "@keyframes step-beat": {
+    "0%": { fill: "color-mix(in srgb, var(--accent) 14%, var(--card))" },
+    "100%": { fill: "var(--card)" },
+  },
+  "@media (prefers-reduced-motion: no-preference)": {
+    "& .board-bg": { animation: "step-beat 200ms ease-out" },
+  },
+});
+
+/** All green: the two places that carry the result both take the hit. */
+const struck = css({
+  "@keyframes struck": {
+    "0%": { transform: "scale(1)" },
+    "18%": { transform: "scale(1.28)" },
+    "45%": { transform: "scale(0.98)" },
+    "100%": { transform: "scale(1)" },
+  },
+  "@media (prefers-reduced-motion: no-preference)": {
+    animation: "struck 900ms cubic-bezier(0.22, 1.4, 0.4, 1)",
+  },
+});
+
+/**
+ * A registered part arriving in the library. Not an entrance mixin: the list is rebuilt whenever
+ * the tab opens, so every card would animate on a tab switch rather than only the new one.
+ */
+const arrived = css({
+  "@keyframes arrive": {
+    "0%": {
+      transform: "translateY(10px) scale(0.94)",
+      opacity: 0,
+      borderColor: "var(--accent)",
+    },
+    "40%": {
+      borderColor: "var(--accent)",
+      background: "color-mix(in srgb, var(--accent) 14%, transparent)",
+    },
+    "100%": { transform: "translateY(0) scale(1)", opacity: 1 },
+  },
+  "@media (prefers-reduced-motion: no-preference)": {
+    animation: "arrive 700ms cubic-bezier(0.22, 1.2, 0.4, 1)",
+  },
+});
+
+/** An impossible placement already goes red; the pulse is what makes it register. */
+const ghostRefused = css({
+  "@keyframes ghost-refuse": {
+    "0%": { transform: "scale(1)" },
+    "50%": { transform: "scale(1.04)" },
+    "100%": { transform: "scale(1)" },
+  },
+  "@media (prefers-reduced-motion: no-preference)": {
+    transformBox: "fill-box",
+    transformOrigin: "center",
+    animation: "ghost-refuse 700ms ease-in-out infinite",
+  },
+});
 
 /**
  * The stage editor: a board, a palette, live simulation and the stage's tests.
@@ -953,21 +1038,18 @@ export const Editor = island(
           : pins.find((wp) => wp.pin.name === "c")?.side === "s"
           ? -6
           : 12;
+      const refused = ghost && !edit.canPlace(design, library, placement);
       const cls = `part${def.primitive ? ` prim-${def.primitive}` : ""}${
         selected === index && !ghost ? " selected" : ""
-      }${
-        ghost
-          ? (edit.canPlace(design, library, placement)
-            ? " ghost"
-            : " ghost bad")
-          : ""
-      }`;
+      }${ghost ? (refused ? " ghost bad" : " ghost") : ""}`;
       const vertical = def.primitive === "split" && height > width;
       return (
         <g
           key={ghost ? "ghost" : `p${index}`}
           class={cls}
-          mix={ghost ? [] : [PART_ENTRANCE(), PART_EXIT()]}
+          mix={ghost
+            ? (refused ? [ghostRefused] : [])
+            : [PART_ENTRANCE(), PART_EXIT()]}
         >
           <rect
             x={x + 2}
@@ -1132,14 +1214,14 @@ export const Editor = island(
           viewBox={`0 0 ${w} ${h}`}
           width={Math.round(w * scale)}
           height={Math.round(h * scale)}
-          class={`board tool-${tool.kind}${playing_("pass") ? " cleared" : ""}${
-            playing_("step") ? " stepped" : ""
-          }`}
+          class={`board tool-${tool.kind}`}
           mix={[
             on("pointerdown", (event) => pointerDown(event as PointerEvent)),
             on("pointermove", (event) => pointerMove(event as PointerEvent)),
             on("pointerup", pointerUp),
             on("pointerleave", pointerLeave),
+            ...(playing_("pass") ? [boardCleared] : []),
+            ...(playing_("step") ? [boardStepped] : []),
           ]}
         >
           <rect
@@ -1239,19 +1321,20 @@ export const Editor = island(
     /** `smallest` marks the tightest build of a function, which is the one worth reaching for. */
     function partButton(def: ComponentDef, smallest = false): RemixNode {
       const active = tool.kind === "place" && tool.componentId === def.id;
-      const arrived = playing_("register") && def.name === registered;
+      const justRegistered = playing_("register") && def.name === registered;
       return (
         <button
           key={def.id}
           type="button"
-          class={`part-card${active ? " active" : ""}${
-            arrived ? " arrived" : ""
-          }`}
-          mix={[on("click", () => {
-            tool = { kind: "place", componentId: def.id };
-            selected = undefined;
-            handle.update();
-          })]}
+          class={`part-card${active ? " active" : ""}`}
+          mix={[
+            on("click", () => {
+              tool = { kind: "place", componentId: def.id };
+              selected = undefined;
+              handle.update();
+            }),
+            ...(justRegistered ? [arrived] : []),
+          ]}
         >
           {sizeGlyph(def)}
           <span class="text">
@@ -1966,9 +2049,8 @@ export const Editor = island(
             </button>
             <span class="spacer" />
             <span
-              class={`pill result${allPassed ? " pass" : ""}${
-                playing_("pass") ? " struck" : ""
-              }`}
+              class={`pill result${allPassed ? " pass" : ""}`}
+              mix={playing_("pass") ? [struck] : []}
             >
               テスト {passed} / {tests.length}
             </span>
@@ -2083,12 +2165,12 @@ export const Editor = island(
               </div>
               <button
                 type="button"
-                class={`test-bar${allPassed ? " pass" : ""}${
-                  playing_("pass") ? " struck" : ""
-                }`}
+                class={`test-bar${allPassed ? " pass" : ""}`}
                 mix={[on("click", () => openPanel("tests"))]}
               >
-                <span class="mark">{allPassed ? "✓" : "…"}</span>
+                <span class="mark" mix={playing_("pass") ? [struck] : []}>
+                  {allPassed ? "✓" : "…"}
+                </span>
                 <span class="count">テスト {passed} / {tests.length}</span>
                 <span class="note">
                   {problems.length > 0
