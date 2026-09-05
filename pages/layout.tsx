@@ -42,6 +42,8 @@ export function renderPage(props: LayoutProps): Response {
   const { base, islandUrls } = props;
   const chunks = [...new Set(Object.values(islandUrls))];
   const home = base === "" ? "/" : base;
+  // One value, two consumers: the browser's tab icon and game-center's manifest.
+  const icon = `${base}/static/favicon.svg`;
 
   return htmlDocument(
     <html lang="ja">
@@ -52,11 +54,11 @@ export function renderPage(props: LayoutProps): Response {
         {props.description
           ? <meta name="description" content={props.description} />
           : null}
-        <link rel="icon" href={`${base}/static/favicon.svg`} />
+        <link rel="icon" href={icon} />
         <link rel="stylesheet" href={`${base}/static/styles.css`} />
         {/* game-center (https://ga-cen.kbn.one) reads this; browsers ignore the type. */}
         <script type="application/gamecenter+json">
-          {JSON.stringify(manifest())}
+          {JSON.stringify(manifest(icon))}
         </script>
       </head>
       <body>

@@ -513,9 +513,12 @@ Deno.test("the reference CPU runs the test programs", () => {
 });
 
 Deno.test("achievements: the manifest is valid and registrations earn the right keys", () => {
-  const m = manifest();
+  const m = manifest("/static/favicon.svg");
   assertEquals(m.author, "7499d00d-fcff-4630-91a0-c034893c8d08");
   assert(/^[a-z0-9][a-z0-9-]{1,62}[a-z0-9]$/.test(m.id as string));
+  // The hub resolves the icon against whichever page carried the manifest, so it has to be
+  // rooted. What the shell actually passes is checked against the built pages, not here.
+  assertEquals(m.icon, "/static/favicon.svg");
   assertEquals(
     new Set(ACHIEVEMENTS.map((a) => a.key)).size,
     ACHIEVEMENTS.length,
