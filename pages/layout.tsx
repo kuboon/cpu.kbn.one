@@ -4,13 +4,20 @@
  * It also carries the one thing the browser cannot work out for itself: the map from an island's
  * name to the chunk the bundler emitted, plus the scripts that load them. A page that places no
  * island gets neither, and so ships no JavaScript at all.
+ *
+ * It renders through `renderToStream`, and the difference from `renderToString` is not buffering:
+ * `renderToString` is `renderToStream` with `stripFlushMarkers()` over the result. That marker,
+ * `<!-- rmx:flush document -->`, is how the client runtime recognises a whole document. On a page
+ * that has islands the runtime turns every internal `<a>` click into a frame navigation, fetches
+ * the destination, and swaps the document only when the marker is there; strip it and the URL
+ * changes while the page does not, with nothing logged anywhere. Keeping it is what lets a plain
+ * `<a href>` navigate correctly whether or not the page it sits on has islands.
  */
 
-import { renderToString } from "@remix-run/ui/server";
+import { renderToStream } from "@remix-run/ui/server";
 import type { RemixNode } from "@remix-run/ui";
 import { ISLAND_MAP_ELEMENT_ID } from "@kuboon/remix-ssg/client";
 
-import { Link } from "./lib/link.tsx";
 import { manifest } from "./lib/game/achievements.ts";
 
 /** What every page hands the shell. */
@@ -37,7 +44,7 @@ export async function renderPage(props: LayoutProps): Promise<string> {
   const chunks = [...new Set(Object.values(islandUrls))];
   const home = base === "" ? "/" : base;
 
-  const html = await renderToString(
+  const stream = renderToStream(
     <html lang="ja">
       <head>
         <meta charset="utf-8" />
@@ -55,11 +62,11 @@ export async function renderPage(props: LayoutProps): Promise<string> {
       </head>
       <body>
         <header class="site-header">
-          <Link class="brand" href={home}>{SITE_NAME}</Link>
+          <a class="brand" href={home}>{SITE_NAME}</a>
           <nav class="site-nav">
-            <Link href={`${base}/stages`}>ステージ</Link>
-            <Link href={`${base}/library`}>ライブラリ</Link>
-            <Link href={`${base}/how-to-play`}>遊び方</Link>
+            <a href={`${base}/stages`}>ステージ</a>
+            <a href={`${base}/library`}>ライブラリ</a>
+            <a href={`${base}/how-to-play`}>遊び方</a>
           </nav>
         </header>
         <main class="site-main">{props.children}</main>
@@ -82,7 +89,13 @@ export async function renderPage(props: LayoutProps): Promise<string> {
           : null}
       </body>
     </html>,
+    {
+      onError(error) {
+        throw error;
+      },
+    },
   );
+  const html = await new Response(stream).text();
 
   return `<!DOCTYPE html>${html}`;
 }

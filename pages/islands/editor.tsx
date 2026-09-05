@@ -3,8 +3,6 @@ import { animateEntrance, animateExit, spring } from "@remix-run/ui/animation";
 import type { Handle, RemixNode } from "@remix-run/ui";
 import { island } from "@kuboon/remix-ssg/client";
 
-import { Link } from "../lib/link.tsx";
-
 import type {
   Cell,
   ComponentDef,
@@ -99,6 +97,20 @@ function clamp(value: number, low: number, high: number): number {
  * the element is back at rest. Anything that stays becomes the new normal and stops reading.
  * The lengths are tiered by how much the event matters — a part landing is not a stage clear.
  */
+/**
+ * The runtime's opt-out: this anchor navigates the document instead of the frame.
+ *
+ * Every other link on the site is a plain `<a>` now that the shell renders through
+ * `renderToStream` and keeps the document flush marker. These two are the exception. They lead
+ * from one stage to another, which is the same island with different props, and the DOM diff
+ * fast-forwards across a hydrated region rather than re-mounting it: the document would swap and
+ * the title would change, while the board on screen stayed on the stage you came from.
+ *
+ * The attribute is not in the JSX prop types, and the runtime ignores a name it does not know, so
+ * getting it wrong fails silently — @remix-run/ui 0.8.0 renamed it from `rmx-document`.
+ */
+const DOCUMENT_NAV = { "data-rmx-document": "" } as Record<string, string>;
+
 const PULSE_MS: Record<string, number> = {
   step: 200,
   register: 700,
@@ -2000,11 +2012,11 @@ export const Editor = island(
       if (missing !== undefined) {
         return (
           <p>
-            ステージ「{missing}」はありません。<Link
+            ステージ「{missing}」はありません。<a
               href={handle.props.base || "/"}
             >
               ステージ一覧へ
-            </Link>
+            </a>
           </p>
         );
       }
@@ -2022,10 +2034,10 @@ export const Editor = island(
           class={`editor tab-${tab}${panelOpen ? " panel-open" : ""}`}
         >
           <header class="app-bar">
-            <Link class="back" href={base || "/"}>
+            <a class="back" href={base || "/"}>
               {icon(<path d="M15 5l-7 7 7 7" />)}
               <span>ステージ一覧</span>
-            </Link>
+            </a>
             <div class="who">
               <h1>{current.title}</h1>
               <span>{index + 1} / {STAGES.length}</span>
@@ -2080,16 +2092,16 @@ export const Editor = island(
             <nav class="stage-jump">
               {index > 0
                 ? (
-                  <Link href={stageHref(STAGES[index - 1])}>
+                  <a {...DOCUMENT_NAV} href={stageHref(STAGES[index - 1])}>
                     ← {STAGES[index - 1].title}
-                  </Link>
+                  </a>
                 )
                 : null}
               {index < STAGES.length - 1
                 ? (
-                  <Link href={stageHref(STAGES[index + 1])}>
+                  <a {...DOCUMENT_NAV} href={stageHref(STAGES[index + 1])}>
                     {STAGES[index + 1].title} →
-                  </Link>
+                  </a>
                 )
                 : null}
             </nav>
