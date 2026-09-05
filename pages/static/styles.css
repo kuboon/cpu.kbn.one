@@ -789,6 +789,12 @@ body:has(.editor) .site-main {
   color: #fff;
 }
 
+/* The entrance and exit mixins scale a placed part, which needs an origin to scale about. */
+.part {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
 /* ---- the board tab --------------------------------------------------------------------------- */
 
 /* The row and column a − would take. The rule is invisible until you can see what it picks. */

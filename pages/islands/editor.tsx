@@ -1,4 +1,5 @@
-import { on } from "@remix-run/ui";
+import { css, on } from "@remix-run/ui";
+import { animateEntrance, animateExit, spring } from "@remix-run/ui/animation";
 import type { Handle, RemixNode } from "@remix-run/ui";
 import { island } from "@kuboon/remix-ssg/client";
 
@@ -92,6 +93,132 @@ function clamp(value: number, low: number, high: number): number {
 }
 
 /**
+ * How long each kind of response stays on the element, in ms.
+ *
+ * Feedback is transient: the class goes on, the animation plays once, the class comes off and
+ * the element is back at rest. Anything that stays becomes the new normal and stops reading.
+ * The lengths are tiered by how much the event matters — a part landing is not a stage clear.
+ */
+const PULSE_MS: Record<string, number> = {
+  step: 200,
+  register: 700,
+  pass: 900,
+};
+
+/**
+ * Whether to skip the animations. The CSS ones sit behind a media query; the mixin ones are
+ * WAAPI and no query reaches them, so they are turned off here instead — passing `false` as the
+ * config leaves the element to appear and disappear with no animation at all.
+ */
+const still = (): boolean =>
+  globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+
+/** A part arriving on the board: squashed on contact, springing back to square. */
+const PART_ENTRANCE = () =>
+  animateEntrance(
+    still() ? false : {
+      opacity: 0.5,
+      transform: "scale(1.22, 0.78)",
+      ...spring("bouncy"),
+    },
+  );
+
+/** And leaving it. */
+const PART_EXIT = () =>
+  animateExit(
+    still() ? false : {
+      opacity: 0,
+      transform: "scale(0.8)",
+      ...spring("snappy"),
+    },
+  );
+
+/*
+ * The three responses below belong to no single element — a tint across the whole board, or a
+ * loop with no beginning — so there is no insertion for an entrance mixin to hang on and they
+ * stay CSS. Each carries its own reduced-motion guard, the way the library's own components do.
+ */
+
+/** The wash the moment the tests first come green: the largest response the editor has. */
+const boardCleared = css({
+  "@keyframes board-clear": {
+    "0%": { fill: "color-mix(in srgb, #16a34a 40%, var(--card))" },
+    "60%": { fill: "color-mix(in srgb, #16a34a 12%, var(--card))" },
+    "100%": { fill: "var(--card)" },
+  },
+  "@keyframes surge": {
+    "0%": { strokeWidth: 8 },
+    "25%": { strokeWidth: 8 },
+    "100%": { strokeWidth: 4 },
+  },
+  "@media (prefers-reduced-motion: no-preference)": {
+    "& .board-bg": { animation: "board-clear 900ms ease-out" },
+    "& .wire.on": { animation: "surge 900ms ease-out" },
+    "& .pin.on circle": { animation: "surge 900ms ease-out" },
+  },
+});
+
+/** One beat per test step, so ▶ 再生 reads as something running. */
+const boardStepped = css({
+  "@keyframes step-beat": {
+    "0%": { fill: "color-mix(in srgb, var(--accent) 14%, var(--card))" },
+    "100%": { fill: "var(--card)" },
+  },
+  "@media (prefers-reduced-motion: no-preference)": {
+    "& .board-bg": { animation: "step-beat 200ms ease-out" },
+  },
+});
+
+/** All green: the two places that carry the result both take the hit. */
+const struck = css({
+  "@keyframes struck": {
+    "0%": { transform: "scale(1)" },
+    "18%": { transform: "scale(1.28)" },
+    "45%": { transform: "scale(0.98)" },
+    "100%": { transform: "scale(1)" },
+  },
+  "@media (prefers-reduced-motion: no-preference)": {
+    animation: "struck 900ms cubic-bezier(0.22, 1.4, 0.4, 1)",
+  },
+});
+
+/**
+ * A registered part arriving in the library. Not an entrance mixin: the list is rebuilt whenever
+ * the tab opens, so every card would animate on a tab switch rather than only the new one.
+ */
+const arrived = css({
+  "@keyframes arrive": {
+    "0%": {
+      transform: "translateY(10px) scale(0.94)",
+      opacity: 0,
+      borderColor: "var(--accent)",
+    },
+    "40%": {
+      borderColor: "var(--accent)",
+      background: "color-mix(in srgb, var(--accent) 14%, transparent)",
+    },
+    "100%": { transform: "translateY(0) scale(1)", opacity: 1 },
+  },
+  "@media (prefers-reduced-motion: no-preference)": {
+    animation: "arrive 700ms cubic-bezier(0.22, 1.2, 0.4, 1)",
+  },
+});
+
+/** An impossible placement already goes red; the pulse is what makes it register. */
+const ghostRefused = css({
+  "@keyframes ghost-refuse": {
+    "0%": { transform: "scale(1)" },
+    "50%": { transform: "scale(1.04)" },
+    "100%": { transform: "scale(1)" },
+  },
+  "@media (prefers-reduced-motion: no-preference)": {
+    transformBox: "fill-box",
+    transformOrigin: "center",
+    animation: "ghost-refuse 700ms ease-in-out infinite",
+  },
+});
+
+/**
  * The stage editor: a board, a palette, live simulation and the stage's tests.
  *
  * The server render is a placeholder: the draft and the registered components live in the
@@ -123,6 +250,12 @@ export const Editor = island(
     let infoOpen = false;
     /** The parts placed most recently, newest first; the shortcut row at the top of 部品. */
     let recent: string[] = [];
+    /** Responses playing right now, by token; each clears itself when its animation ends. */
+    const pulses = new Map<string, number>();
+    /** Whether the tests were all passing before the last edit, to catch the moment they start. */
+    let wasPassing = false;
+    /** Which way the score last moved, so the number can arrive in the colour of that news. */
+    let areaMoved: "down" | "up" | undefined;
     let sortBy: "area" | "new" = "area";
     let search = "";
     let drag: Drag | undefined;
@@ -243,6 +376,7 @@ export const Editor = island(
       storeSave(save);
       registered = trimmed;
       unlocked = [];
+      juice("register");
       handle.update();
       awardAchievements(stage.id, area(design));
     }
@@ -312,17 +446,53 @@ export const Editor = island(
       );
     }
 
+    /**
+     * Plays one response. The token is off, then on, then off again, so the animation restarts
+     * even when the element was already on screen; a repeat of the same token replaces it rather
+     * than stacking. Nothing here touches the design or the simulation.
+     */
+    function juice(token: string): void {
+      const kind = token.split(":")[0];
+      const running = pulses.get(token);
+      if (running !== undefined) clearTimeout(running);
+      pulses.set(
+        token,
+        setTimeout(() => {
+          pulses.delete(token);
+          handle.update();
+        }, PULSE_MS[kind] ?? 300),
+      );
+    }
+
+    function playing_(token: string): boolean {
+      return pulses.has(token);
+    }
+
     /** Moves a part to the front of the shortcut row, keeping the four most recent. */
     function remember(componentId: string): void {
       recent = [componentId, ...recent.filter((id) => id !== componentId)]
         .slice(0, 4);
     }
 
+    /**
+     * Marks whether the tests are green, and fires the clear once on the way in.
+     * `quiet` records the state without announcing it, for a draft that loads already green.
+     */
+    function notePassing(quiet = false): void {
+      const passing = problems.length === 0 && tests.length > 0 &&
+        tests.every((t) => t.ok);
+      if (passing && !wasPassing && !quiet) juice("pass");
+      wasPassing = passing;
+    }
+
     /** Applies an edit: `undefined` means it was refused, and `why` is shown instead. */
     function commit(next: Design | undefined, why?: string): void {
       if (next === undefined) {
         message = why;
+        // A refusal that only prints a sentence reads as nothing happening.
+        juice("refuse");
       } else if (next !== design) {
+        const before = area(design);
         history = [...history.slice(-99), design];
         design = next;
         message = undefined;
@@ -330,6 +500,13 @@ export const Editor = island(
         shown = undefined;
         rebuild();
         saveDraft();
+        const after = area(design);
+        areaMoved = after === before
+          ? undefined
+          : after < before
+          ? "down"
+          : "up";
+        notePassing();
       }
       handle.update();
     }
@@ -341,6 +518,7 @@ export const Editor = island(
       selected = undefined;
       rebuild();
       saveDraft();
+      notePassing();
       handle.update();
     }
 
@@ -361,6 +539,7 @@ export const Editor = island(
         inputs = { ...inputs, ...stage.steps[i].set };
         live = sim.evaluate(stage.steps[i].set);
       }
+      juice("step");
       handle.update();
     }
 
@@ -401,6 +580,7 @@ export const Editor = island(
       design = save.drafts[stage.id] ?? edit.defaultDesign(stage);
       panelOpen = globalThis.matchMedia(`(min-width: ${WIDE}px)`).matches;
       rebuild();
+      notePassing(true);
       handle.update();
       requestAnimationFrame(fit);
     }
@@ -858,18 +1038,19 @@ export const Editor = island(
           : pins.find((wp) => wp.pin.name === "c")?.side === "s"
           ? -6
           : 12;
+      const refused = ghost && !edit.canPlace(design, library, placement);
       const cls = `part${def.primitive ? ` prim-${def.primitive}` : ""}${
         selected === index && !ghost ? " selected" : ""
-      }${
-        ghost
-          ? (edit.canPlace(design, library, placement)
-            ? " ghost"
-            : " ghost bad")
-          : ""
-      }`;
+      }${ghost ? (refused ? " ghost bad" : " ghost") : ""}`;
       const vertical = def.primitive === "split" && height > width;
       return (
-        <g key={ghost ? "ghost" : `p${index}`} class={cls}>
+        <g
+          key={ghost ? "ghost" : `p${index}`}
+          class={cls}
+          mix={ghost
+            ? (refused ? [ghostRefused] : [])
+            : [PART_ENTRANCE(), PART_EXIT()]}
+        >
           <rect
             x={x + 2}
             y={y + 2}
@@ -1039,6 +1220,8 @@ export const Editor = island(
             on("pointermove", (event) => pointerMove(event as PointerEvent)),
             on("pointerup", pointerUp),
             on("pointerleave", pointerLeave),
+            ...(playing_("pass") ? [boardCleared] : []),
+            ...(playing_("step") ? [boardStepped] : []),
           ]}
         >
           <rect
@@ -1138,16 +1321,20 @@ export const Editor = island(
     /** `smallest` marks the tightest build of a function, which is the one worth reaching for. */
     function partButton(def: ComponentDef, smallest = false): RemixNode {
       const active = tool.kind === "place" && tool.componentId === def.id;
+      const justRegistered = playing_("register") && def.name === registered;
       return (
         <button
           key={def.id}
           type="button"
           class={`part-card${active ? " active" : ""}`}
-          mix={[on("click", () => {
-            tool = { kind: "place", componentId: def.id };
-            selected = undefined;
-            handle.update();
-          })]}
+          mix={[
+            on("click", () => {
+              tool = { kind: "place", componentId: def.id };
+              selected = undefined;
+              handle.update();
+            }),
+            ...(justRegistered ? [arrived] : []),
+          ]}
         >
           {sizeGlyph(def)}
           <span class="text">
@@ -1861,11 +2048,33 @@ export const Editor = island(
               )}
             </button>
             <span class="spacer" />
-            <span class={`pill result${allPassed ? " pass" : ""}`}>
+            <span
+              class={`pill result${allPassed ? " pass" : ""}`}
+              mix={playing_("pass") ? [struck] : []}
+            >
               テスト {passed} / {tests.length}
             </span>
-            <span class="pill">
-              面積 <strong>{area(design)}</strong>
+            <span class="pill area">
+              面積{" "}
+              <strong
+                key={`area-${area(design)}`}
+                mix={[
+                  animateEntrance(
+                    still() ? false : {
+                      transform: "scale(1.4)",
+                      // Starts in the colour of the direction it moved and settles back.
+                      color: areaMoved === "down"
+                        ? "#16a34a"
+                        : areaMoved === "up"
+                        ? "#dc2626"
+                        : "currentColor",
+                      ...spring("bouncy"),
+                    },
+                  ),
+                ]}
+              >
+                {area(design)}
+              </strong>
               {target !== undefined ? <em>/ パー {target}</em> : null}
             </span>
             <nav class="stage-jump">
@@ -1924,7 +2133,31 @@ export const Editor = island(
                   </button>
                 </div>
                 {renderOrientBar()}
-                {message ? <p class="message">{message}</p> : null}
+                {message
+                  ? (
+                    <p
+                      key="message"
+                      class="message"
+                      mix={[
+                        animateEntrance(
+                          still() ? false : {
+                            opacity: 0,
+                            transform: "translateX(-10px)",
+                            ...spring("bouncy"),
+                          },
+                        ),
+                        animateExit(
+                          still() ? false : {
+                            opacity: 0,
+                            ...spring("snappy"),
+                          },
+                        ),
+                      ]}
+                    >
+                      {message}
+                    </p>
+                  )
+                  : null}
               </div>
               <div class="status">
                 <span>{design.width} × {design.height} マス</span>
@@ -1935,7 +2168,9 @@ export const Editor = island(
                 class={`test-bar${allPassed ? " pass" : ""}`}
                 mix={[on("click", () => openPanel("tests"))]}
               >
-                <span class="mark">{allPassed ? "✓" : "…"}</span>
+                <span class="mark" mix={playing_("pass") ? [struck] : []}>
+                  {allPassed ? "✓" : "…"}
+                </span>
                 <span class="count">テスト {passed} / {tests.length}</span>
                 <span class="note">
                   {problems.length > 0
