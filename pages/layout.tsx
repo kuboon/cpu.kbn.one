@@ -57,7 +57,7 @@ export async function renderPage(props: LayoutProps): Promise<string> {
         <header class="site-header">
           <Link class="brand" href={home}>{SITE_NAME}</Link>
           <nav class="site-nav">
-            <Link href={home}>ステージ</Link>
+            <Link href={`${base}/stages`}>ステージ</Link>
             <Link href={`${base}/library`}>ライブラリ</Link>
             <Link href={`${base}/how-to-play`}>遊び方</Link>
           </nav>
