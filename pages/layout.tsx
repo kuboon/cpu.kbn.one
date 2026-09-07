@@ -17,6 +17,7 @@ import type { RemixNode } from "@remix-run/ui";
 import { ISLAND_MAP_ELEMENT_ID } from "@kuboon/remix-ssg/client";
 import { htmlDocument } from "@kuboon/remix-ssg/site";
 
+import { origin } from "./lib/base.ts";
 import { manifest } from "./lib/game/achievements.ts";
 
 /** What every page hands the shell. */
@@ -44,6 +45,9 @@ export function renderPage(props: LayoutProps): Response {
   const home = base === "" ? "/" : base;
   // One value, two consumers: the browser's tab icon and game-center's manifest.
   const icon = `${base}/static/favicon.svg`;
+  // The link preview's image, absolute because a crawler resolves it against nothing — see
+  // `origin` in lib/base.ts. PNG rather than the SVG the tab icon uses: most crawlers reject SVG.
+  const card = `${origin}${base}/static/og.png`;
 
   return htmlDocument(
     <html lang="ja">
@@ -55,6 +59,19 @@ export function renderPage(props: LayoutProps): Response {
           ? <meta name="description" content={props.description} />
           : null}
         <link rel="icon" href={icon} />
+        {
+          /* A card with no title falls back to whatever the crawler scrapes; X shows a small
+            thumbnail without `summary_large_image`. No `og:url`: the shell is not told which page
+            it renders, and every crawler falls back to the address it fetched anyway. */
+        }
+        <meta property="og:type" content="website" />
+        <meta property="og:site_name" content={SITE_NAME} />
+        <meta property="og:title" content={props.title} />
+        {props.description
+          ? <meta property="og:description" content={props.description} />
+          : null}
+        <meta property="og:image" content={card} />
+        <meta name="twitter:card" content="summary_large_image" />
         <link rel="stylesheet" href={`${base}/static/styles.css`} />
         {/* game-center (https://ga-cen.kbn.one) reads this; browsers ignore the type. */}
         <script type="application/gamecenter+json">

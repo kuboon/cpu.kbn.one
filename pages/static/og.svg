@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200"
+  height="630"
+  role="img" aria-label="Minimum CPU — リレーから CPU へ、できるだけ小さく">
+  <!--
+    Source for og.png, the card link previews show.
+
+    og.png beside this file is the rendering that ships; crawlers want a raster, and most of them
+    reject SVG outright. Edit this file, rasterise it at 1200x630, and replace the PNG:
+
+      chromium screenshot at 1200x630, or any SVG rasteriser (rsvg-convert, resvg, Inkscape).
+
+    The text is set in whatever gothic face the renderer has, so a re-render on another machine
+    will not be pixel-identical. That is fine: the PNG in the repository is the reference.
+
+    Nothing here says how many stages there are or what a par is. Those change; a baked image
+    cannot follow them, and a card that quietly goes stale is worse than one that says less.
+
+    The mark is the favicon at size: two registered parts packed into a corner and a wire routed
+    through the rows and columns they left over. Keep a double hyphen out of this comment, XML
+    forbids one inside a comment, and the same palette as favicon.svg.
+  -->
+
+  <defs>
+    <pattern id="grid" width="42" height="42" patternUnits="userSpaceOnUse">
+      <path d="M42 0H0V42" fill="none" stroke="#1e293b" stroke-width="1" />
+    </pattern>
+  </defs>
+
+  <rect width="1200" height="630" fill="#0b0f19" />
+  <rect width="1200" height="630" fill="url(#grid)" opacity="0.55" />
+
+  <text x="80" y="196" fill="#9ca3af" font-size="30"
+    font-family="IPAPGothic, IPAGothic, 'Hiragino Sans', 'Noto Sans JP', sans-serif">ブラウザで遊べる 1 人用パズル</text>
+
+  <text fill="#e5e7eb" font-size="68" font-weight="bold"
+    font-family="IPAPGothic, IPAGothic, 'Hiragino Sans', 'Noto Sans JP', sans-serif">
+    <tspan x="80" y="304">リレーから CPU へ、</tspan>
+    <tspan x="80" y="398">できるだけ小さく</tspan>
+  </text>
+
+  <text x="80" y="470" fill="#9ca3af" font-size="30"
+    font-family="IPAPGothic, IPAGothic, 'Hiragino Sans', 'Noto Sans JP', sans-serif">スコアは盤面の面積。小さいほどよい。</text>
+
+  <text x="80" y="556" fill="#60a5fa" font-size="34"
+    font-family="IPAPGothic, IPAGothic, 'Hiragino Sans', 'Noto Sans JP', sans-serif">cpu.kbn.one</text>
+
+  <g transform="translate(790 145) scale(5.3125)">
+    <rect width="64" height="64" rx="14" fill="#111827" />
+    <rect x="8" y="8" width="32" height="24" rx="5" fill="#2563eb" />
+    <rect x="8" y="38" width="14" height="18" rx="3" fill="#2563eb" />
+    <path d="M50 14V50H30" fill="none" stroke="#16a34a" stroke-width="12"
+      stroke-linecap="round" stroke-linejoin="round" />
+  </g>
+</svg>

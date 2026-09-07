@@ -29,9 +29,12 @@ export { base };
 /**
  * Where the crawl starts.
  *
- * Everything else is reached by following links.
+ * Everything else is reached by following links — which is why the link preview's card is named
+ * here. `og:image` has to be an absolute URL, and an absolute URL is not a link the crawl follows,
+ * so the file would be served in dev and then missing from the deploy. Its source, `og.svg`, is
+ * deliberately not listed: nothing fetches it, so nothing should ship it.
  */
-export const entryPoints: readonly string[] = ["/"];
+export const entryPoints: readonly string[] = ["/", "/static/og.png"];
 
 /** Where this deploys. The build writes the file this rule would serve. */
 export const fileServer: FileServerBehavior = githubPages();
