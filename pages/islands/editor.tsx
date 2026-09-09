@@ -87,7 +87,7 @@ const ZOOM_STEP = 1.25;
 /** At or above this width the side panel opens with the page; below it, it starts as a sheet. */
 const WIDE = 1100;
 
-type Tab = "parts" | "tests" | "board";
+type Tab = "parts" | "board" | "tests";
 
 function clamp(value: number, low: number, high: number): number {
   return Math.min(high, Math.max(low, value));
@@ -1760,6 +1760,12 @@ export const Editor = island(
       const passed = tests.filter((t) => t.ok).length;
       const allPassed = problems.length === 0 && tests.length > 0 &&
         passed === tests.length;
+      // The stage after this one, so a pass can be acted on where it is read. `undefined` on the
+      // last stage, and the link is then simply absent.
+      const here = stage;
+      const next = here !== undefined
+        ? STAGES[STAGES.findIndex((s) => s.id === here.id) + 1]
+        : undefined;
       return (
         <section class="tests">
           <h3>
@@ -1791,7 +1797,25 @@ export const Editor = island(
           {allPassed
             ? (
               <div class="register">
-                <p class="pass">すべて合格。面積 {area(design)}。</p>
+                <p class="pass">
+                  <span>すべて合格。面積 {area(design)}。</span>
+                  {
+                    /* `DOCUMENT_NAV` for the same reason the app bar's jumps carry it: the DOM
+                      diff fast-forwards across a hydrated region, so a frame navigation from one
+                      stage to another would change the URL and leave the board alone. */
+                  }
+                  {next !== undefined
+                    ? (
+                      <a
+                        {...DOCUMENT_NAV}
+                        class="next"
+                        href={`${handle.props.base}/play/${next.id}`}
+                      >
+                        次は {next.title} →
+                      </a>
+                    )
+                    : null}
+                </p>
                 {registered !== undefined
                   ? (
                     <p>
@@ -2138,9 +2162,10 @@ export const Editor = island(
         <aside class="panel">
           <div class="grabber" />
           <div class="tabs">
+            {/* 部品 → 盤面 → テスト: what you place, where you place it, whether it works. */}
             {tabButton("parts", "部品")}
-            {tabButton("tests", "テスト")}
             {tabButton("board", "盤面")}
+            {tabButton("tests", "テスト")}
             <button
               type="button"
               class="collapse"
