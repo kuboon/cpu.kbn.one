@@ -1417,9 +1417,22 @@ body:has(.editor) .site-main {
   color: #dc2626;
 }
 
+/*
+ * The pass line and, beside it, the way on. They wrap rather than squeeze because the panel is
+ * narrow on a phone, and the link keeps the accent colour so it reads as somewhere to go rather
+ * than as more of the green sentence.
+ */
 .tests .pass {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25rem 0.75rem;
   color: #16a34a;
   font-weight: 600;
+}
+
+.tests .pass .next {
+  white-space: nowrap;
 }
 
 /* ---- library ---------------------------------------------------------------------------------- */
