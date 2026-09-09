@@ -1463,9 +1463,12 @@ export const Editor = island(
       sub = false,
     ): RemixNode {
       const open = key !== undefined && partInfo === key;
+      // The heading's identity. `key` names a help panel and not every group has one, so the
+      // label stands in: no two headings in a panel share one.
+      const id = key ?? label;
       return (
         <>
-          <div class={`group-title${sub ? " sub" : ""}`}>
+          <div key={`title-${id}`} class={`group-title${sub ? " sub" : ""}`}>
             <span>{label}</span>
             {key !== undefined
               ? (
@@ -1491,11 +1494,28 @@ export const Editor = island(
               )
               : null}
           </div>
-          {open ? <div class="group-info">{body}</div> : null}
+          {open
+            ? <div key={`info-${id}`} class="group-info">{body}</div>
+            : null}
         </>
       );
     }
 
+    /**
+     * The parts panel.
+     *
+     * Every direct child of `.parts` carries a key, because the list changes length while the
+     * panel is open: よく使う appears with the first placement, the search box past six
+     * components, a group's help on a click. Unkeyed, the runtime pairs children off by position,
+     * so one insertion slides every later sibling onto the wrong partner — and a library group's
+     * keyed wrapper ends up matched against a bare grid, which corrupts its bookkeeping.
+     *
+     * The damage then surfaces somewhere else entirely. The next update is the board's, and it
+     * throws `insertBefore` and leaves a pile of stale parts behind: place one part and three are
+     * drawn, drag it and ten are. Nothing is wrong with the design underneath, which is why a
+     * reload appears to fix it — so if this panel ever grows another conditional child, it needs
+     * a key too.
+     */
     function renderParts(): RemixNode {
       const groups = STAGES
         .map((s) => {
@@ -1519,7 +1539,7 @@ export const Editor = island(
         <div class="parts">
           {many
             ? (
-              <div class="part-search">
+              <div key="search" class="part-search">
                 <input
                   key="part-search"
                   type="text"
@@ -1553,7 +1573,7 @@ export const Editor = island(
             ? (
               <>
                 {groupTitle("よく使う")}
-                <div class="part-grid">
+                <div key="grid-shortcuts" class="part-grid">
                   {shortcuts.map((def) => partButton(def))}
                 </div>
               </>
@@ -1571,7 +1591,7 @@ export const Editor = island(
               ))}
             </>,
           )}
-          <div class="part-grid">
+          <div key="grid-primitives" class="part-grid">
             {PRIMITIVES.filter(matches).map((def) => partButton(def))}
           </div>
           {groups.length > 0 ? groupTitle("ライブラリ") : null}
@@ -1601,7 +1621,7 @@ export const Editor = island(
             </div>
           ))}
           {groups.length === 0 && search.trim() !== ""
-            ? <p class="hint">その名前の部品はありません。</p>
+            ? <p key="no-match" class="hint">その名前の部品はありません。</p>
             : null}
         </div>
       );
