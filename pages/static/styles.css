@@ -209,7 +209,24 @@ body:has(.editor) .site-main {
   padding: 0;
 }
 
+/*
+ * No double-tap zoom on the play screen.
+ *
+ * Everything here is tapped repeatedly — a tool, a zoom button, an input pin being toggled — and
+ * two taps in a row are a double tap as far as the browser is concerned, so it zooms the page
+ * instead. `manipulation` says the only gestures to keep are the ones this screen actually wants:
+ * scrolling still scrolls, pinch still zooms, and only the double-tap shortcut goes.
+ *
+ * It is set here rather than on each control because touch-action is resolved against an element
+ * and its ancestors, so one declaration covers the bars, the dock, the panel and the board alike.
+ * The board narrows it further to `none`, because it handles its own drags.
+ *
+ * Scoped to the editor on purpose. On the reading pages a double tap to zoom in on a diagram is a
+ * thing people want. And this is deliberately not `user-scalable=no` on the viewport meta, which
+ * would take pinch away too — and which iOS Safari ignores.
+ */
 .editor {
+  touch-action: manipulation;
   height: 100dvh;
   display: flex;
   flex-direction: column;
