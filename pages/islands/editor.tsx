@@ -285,6 +285,10 @@ export const Editor = island(
     const touches = new Map<number, { x: number; y: number }>();
     /** A two-finger gesture in progress, as it was measured on the last frame. */
     let pinch: Pinch | undefined;
+    /** Set while a gesture frame is booked, so the fingers are read once per frame, together. */
+    let pinchBooked = false;
+    /** Scroll the browser rounded away last frame, carried so a slow pan cannot drift. */
+    let pinchResidue = { x: 0, y: 0 };
     /**
      * The board as the touch found it, so the second finger can take back what the first did.
      *
@@ -402,6 +406,25 @@ export const Editor = island(
     }
 
     /**
+     * Books a frame to read the fingers on.
+     *
+     * The two fingers report separately — one `pointermove` each — so at the moment either one
+     * arrives, the pair is half a frame old: one finger has moved and the other has not. Measured
+     * then, the distance between them changes on every event, and a gesture that only travels
+     * reads as a rapid alternation of zooming in and out, each step dragging the board further
+     * from the fingers than the fingers went. Waiting for the frame reads both at once.
+     */
+    function bookPinch(): void {
+      if (pinchBooked) return;
+      pinchBooked = true;
+      requestAnimationFrame(() => {
+        pinchBooked = false;
+        const now = pinchOf();
+        if (pinch !== undefined && now !== undefined) pinchTo(now);
+      });
+    }
+
+    /**
      * Zooms and pans the board to follow the fingers, one frame's worth.
      *
      * Both halves fall out of the same move: the board point under the old midpoint is put back
@@ -410,7 +433,9 @@ export const Editor = island(
      *
      * The board's own rectangle is what the anchor is measured against, rather than the scroll
      * offsets, because the viewport centres the board while it is smaller than the window — so the
-     * margin, and with it the meaning of `scrollLeft`, changes as the zoom does.
+     * margin, and with it the meaning of `scrollLeft`, changes as the zoom does. Reading it back
+     * after the update settles the board inside this frame, so the next one measures from where
+     * the board actually is and the corrections cannot pile up.
      */
     function pinchTo(now: Pinch): void {
       const from = pinch;
@@ -429,11 +454,37 @@ export const Editor = island(
       );
       zoomedByHand = true;
       handle.update();
-      requestAnimationFrame(() => {
-        const moved = board.getBoundingClientRect();
-        el.scrollLeft += moved.left + fx * moved.width - now.x;
-        el.scrollTop += moved.top + fy * moved.height - now.y;
-      });
+      // Re-queried rather than reused: an update is free to replace the node, and a detached one
+      // measures as nothing at all.
+      const moved = (el.querySelector<SVGSVGElement>("svg.board") ?? board)
+        .getBoundingClientRect();
+      pinchResidue = {
+        x: scrollAxis(el, "scrollLeft", moved.left + fx * moved.width - now.x),
+        y: scrollAxis(el, "scrollTop", moved.top + fy * moved.height - now.y),
+      };
+    }
+
+    /**
+     * Scrolls one axis by `by` plus whatever the last frame could not land, and returns the new
+     * remainder.
+     *
+     * `scrollLeft` and `scrollTop` round to whole pixels. A pan of four and a half pixels a frame
+     * is stored as five, so the board outruns the fingers by half a pixel every frame — a tenth of
+     * a swipe by the end of one. Carrying the rounded-off part keeps the board under the fingers.
+     *
+     * A clamp at the edge of the board leaves a remainder far larger than a rounding, and that one
+     * is dropped: carrying it would bank up scroll the board cannot take, and the fingers would
+     * travel back with nothing happening until the debt was paid off.
+     */
+    function scrollAxis(
+      el: HTMLElement,
+      axis: "scrollLeft" | "scrollTop",
+      by: number,
+    ): number {
+      const from = el[axis];
+      const want = from + by + pinchResidue[axis === "scrollLeft" ? "x" : "y"];
+      el[axis] = want;
+      return clamp(want - el[axis], -1, 1);
     }
 
     /** Hands the board back to the second finger: the first one's drag is abandoned and undone. */
@@ -449,6 +500,7 @@ export const Editor = island(
       }
       beforeTouch = undefined;
       pinch = now;
+      pinchResidue = { x: 0, y: 0 };
       handle.update();
     }
 
@@ -943,8 +995,7 @@ export const Editor = island(
         if (!touches.has(event.pointerId)) return;
         touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
         if (pinch !== undefined) {
-          const now = pinchOf();
-          if (now !== undefined) pinchTo(now);
+          bookPinch();
           return;
         }
       }
