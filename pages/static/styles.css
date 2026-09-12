@@ -19,6 +19,25 @@
   }
 }
 
+/*
+ * No double-tap zoom, anywhere.
+ *
+ * A double tap is a gesture nothing on this site wants: the play screen is tapped repeatedly — a
+ * tool, a zoom button, an input pin — and two taps in a row read as one double tap, so the browser
+ * zooms instead of doing what was asked. The reading pages have no use for it either.
+ *
+ * `manipulation` takes only that gesture away. Scrolling still scrolls and pinch still zooms, which
+ * is why this is not `user-scalable=no` on the viewport meta — that would take pinch too, and iOS
+ * Safari ignores it anyway. One declaration at the root is enough: touch-action is resolved against
+ * an element and its ancestors.
+ *
+ * The board is the one element that overrides this, to `none`, because it works every touch itself
+ * — a finger draws, two fingers zoom and pan the board rather than the page.
+ */
+:root {
+  touch-action: manipulation;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -209,24 +228,7 @@ body:has(.editor) .site-main {
   padding: 0;
 }
 
-/*
- * No double-tap zoom on the play screen.
- *
- * Everything here is tapped repeatedly — a tool, a zoom button, an input pin being toggled — and
- * two taps in a row are a double tap as far as the browser is concerned, so it zooms the page
- * instead. `manipulation` says the only gestures to keep are the ones this screen actually wants:
- * scrolling still scrolls, pinch still zooms, and only the double-tap shortcut goes.
- *
- * It is set here rather than on each control because touch-action is resolved against an element
- * and its ancestors, so one declaration covers the bars, the dock, the panel and the board alike.
- * The board narrows it further to `none`, because it handles its own drags.
- *
- * Scoped to the editor on purpose. On the reading pages a double tap to zoom in on a diagram is a
- * thing people want. And this is deliberately not `user-scalable=no` on the viewport meta, which
- * would take pinch away too — and which iOS Safari ignores.
- */
 .editor {
-  touch-action: manipulation;
   height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -1134,6 +1136,11 @@ body:has(.editor) .site-main {
   color: var(--muted);
 }
 
+/*
+ * The board answers for every gesture over it, so it takes them all: one finger draws, erases and
+ * drags parts, two fingers zoom and pan the board itself. `none` is what stops the browser from
+ * claiming any of them first — without it a drawing finger would scroll the viewport instead.
+ */
 .board {
   display: block;
   touch-action: none;

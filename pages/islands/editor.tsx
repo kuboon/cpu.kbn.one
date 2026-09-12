@@ -69,6 +69,15 @@ type Drag =
   | { kind: "placing"; componentId: string }
   | { kind: "idle" };
 
+/** Two fingers on the board, reduced to the only two numbers the gesture needs. */
+type Pinch = {
+  /** Distance between the fingers; the ratio between frames is the zoom factor. */
+  distance: number;
+  /** Midpoint between them, in client coordinates; where it moves, the board follows. */
+  x: number;
+  y: number;
+};
+
 const KEY_TOOLS: Record<string, Tool> = {
   v: { kind: "select" },
   w: { kind: "wire" },
@@ -272,6 +281,19 @@ export const Editor = island(
     let zoom: number | undefined;
     /** Once the player zooms, a window resize stops refitting the board for them. */
     let zoomedByHand = false;
+    /** Fingers on the board, by pointer id, in client coordinates. */
+    const touches = new Map<number, { x: number; y: number }>();
+    /** A two-finger gesture in progress, as it was measured on the last frame. */
+    let pinch: Pinch | undefined;
+    /**
+     * The board as the touch found it, so the second finger can take back what the first did.
+     *
+     * Two fingers land a few tens of milliseconds apart, and in that gap the first one is an
+     * ordinary tap: with the erase or cross tool it has already changed a cell by the time the
+     * pinch is recognisable. Restoring this undoes that in one go — including the history entries
+     * it pushed, which is why the whole stack is kept and not just the design.
+     */
+    let beforeTouch: { design: Design; history: Design[] } | undefined;
     let panelOpen = false;
     let tab: Tab = "parts";
     /** Whether the ⓘ panel — this stage's own explanation — is down. */
@@ -364,6 +386,70 @@ export const Editor = island(
       if (el === null) return;
       el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
       el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+    }
+
+    // ---- the two-finger gesture ---------------------------------------------------------------
+
+    /** The fingers as a pinch, or undefined while there are not exactly two of them. */
+    function pinchOf(): Pinch | undefined {
+      const [a, b, third] = [...touches.values()];
+      if (b === undefined || third !== undefined) return undefined;
+      return {
+        distance: Math.hypot(a.x - b.x, a.y - b.y),
+        x: (a.x + b.x) / 2,
+        y: (a.y + b.y) / 2,
+      };
+    }
+
+    /**
+     * Zooms and pans the board to follow the fingers, one frame's worth.
+     *
+     * Both halves fall out of the same move: the board point under the old midpoint is put back
+     * under the new one, at the new zoom. Fingers that spread zoom in; fingers that keep their
+     * distance and travel together pan. A gesture that does some of each just works.
+     *
+     * The board's own rectangle is what the anchor is measured against, rather than the scroll
+     * offsets, because the viewport centres the board while it is smaller than the window — so the
+     * margin, and with it the meaning of `scrollLeft`, changes as the zoom does.
+     */
+    function pinchTo(now: Pinch): void {
+      const from = pinch;
+      pinch = now;
+      const el = viewport();
+      if (from === undefined || el === null) return;
+      const board = el.querySelector<SVGSVGElement>("svg.board");
+      if (board === null) return;
+      const rect = board.getBoundingClientRect();
+      const fx = (from.x - rect.left) / rect.width;
+      const fy = (from.y - rect.top) / rect.height;
+      zoom = clamp(
+        (zoom ?? 32) * (now.distance / from.distance),
+        MIN_ZOOM,
+        MAX_ZOOM,
+      );
+      zoomedByHand = true;
+      handle.update();
+      requestAnimationFrame(() => {
+        const moved = board.getBoundingClientRect();
+        el.scrollLeft += moved.left + fx * moved.width - now.x;
+        el.scrollTop += moved.top + fy * moved.height - now.y;
+      });
+    }
+
+    /** Hands the board back to the second finger: the first one's drag is abandoned and undone. */
+    function startPinch(now: Pinch): void {
+      drag = undefined;
+      hover = undefined;
+      message = undefined;
+      if (beforeTouch !== undefined && beforeTouch.design !== design) {
+        design = beforeTouch.design;
+        history = beforeTouch.history;
+        rebuild();
+        saveDraft();
+      }
+      beforeTouch = undefined;
+      pinch = now;
+      handle.update();
     }
 
     function openPanel(next: Tab): void {
@@ -766,9 +852,22 @@ export const Editor = island(
     function pointerDown(event: PointerEvent): void {
       if (stage === undefined || event.button !== 0) return;
       try {
+        // Captured before the gesture is read, so a finger that strays off the board keeps
+        // reporting: a pinch that widens past the edges is the normal way to zoom right in.
         (event.currentTarget as Element).setPointerCapture(event.pointerId);
       } catch {
         // Synthetic events carry no capturable pointer; nothing depends on the capture.
+      }
+      if (event.pointerType === "touch") {
+        touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        const now = pinchOf();
+        if (now !== undefined) {
+          startPinch(now);
+          return;
+        }
+        // A third finger belongs to no gesture; leave the pinch to the two already down.
+        if (pinch !== undefined) return;
+        beforeTouch = { design, history };
       }
       const p = cellOf(event);
       message = undefined;
@@ -840,6 +939,15 @@ export const Editor = island(
 
     function pointerMove(event: PointerEvent): void {
       if (stage === undefined) return;
+      if (event.pointerType === "touch") {
+        if (!touches.has(event.pointerId)) return;
+        touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (pinch !== undefined) {
+          const now = pinchOf();
+          if (now !== undefined) pinchTo(now);
+          return;
+        }
+      }
       const p = cellOf(event);
       const changedCell = hover === undefined || hover.x !== p.x ||
         hover.y !== p.y;
@@ -901,7 +1009,17 @@ export const Editor = island(
       }
     }
 
-    function pointerUp(): void {
+    function pointerUp(event?: PointerEvent): void {
+      if (event !== undefined && event.pointerType === "touch") {
+        touches.delete(event.pointerId);
+        if (pinch !== undefined) {
+          // The gesture ends with the first finger to leave. The other one is not a fresh touch —
+          // it has no drag and starts none — so the board waits until the hand is off it.
+          if (touches.size < 2) pinch = undefined;
+          return;
+        }
+      }
+      if (touches.size === 0) beforeTouch = undefined;
       if (drag === undefined) return;
       const finished = drag;
       drag = undefined;
@@ -955,6 +1073,8 @@ export const Editor = island(
     }
 
     function pointerLeave(): void {
+      // A pinch that spreads past the edge of the board is still a pinch.
+      if (pinch !== undefined) return;
       hover = undefined;
       if (drag !== undefined) pointerUp();
       else handle.update();
@@ -1286,7 +1406,8 @@ export const Editor = island(
           mix={[
             on("pointerdown", (event) => pointerDown(event as PointerEvent)),
             on("pointermove", (event) => pointerMove(event as PointerEvent)),
-            on("pointerup", pointerUp),
+            on("pointerup", (event) => pointerUp(event as PointerEvent)),
+            on("pointercancel", (event) => pointerUp(event as PointerEvent)),
             on("pointerleave", pointerLeave),
             ...(playing_("pass") ? [boardCleared] : []),
             ...(playing_("step") ? [boardStepped] : []),
