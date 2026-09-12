@@ -69,6 +69,15 @@ type Drag =
   | { kind: "placing"; componentId: string }
   | { kind: "idle" };
 
+/** Two fingers on the board, reduced to the only two numbers the gesture needs. */
+type Pinch = {
+  /** Distance between the fingers; the ratio between frames is the zoom factor. */
+  distance: number;
+  /** Midpoint between them, in client coordinates; where it moves, the board follows. */
+  x: number;
+  y: number;
+};
+
 const KEY_TOOLS: Record<string, Tool> = {
   v: { kind: "select" },
   w: { kind: "wire" },
@@ -272,6 +281,23 @@ export const Editor = island(
     let zoom: number | undefined;
     /** Once the player zooms, a window resize stops refitting the board for them. */
     let zoomedByHand = false;
+    /** Fingers on the board, by pointer id, in client coordinates. */
+    const touches = new Map<number, { x: number; y: number }>();
+    /** A two-finger gesture in progress, as it was measured on the last frame. */
+    let pinch: Pinch | undefined;
+    /** Set while a gesture frame is booked, so the fingers are read once per frame, together. */
+    let pinchBooked = false;
+    /** Scroll the browser rounded away last frame, carried so a slow pan cannot drift. */
+    let pinchResidue = { x: 0, y: 0 };
+    /**
+     * The board as the touch found it, so the second finger can take back what the first did.
+     *
+     * Two fingers land a few tens of milliseconds apart, and in that gap the first one is an
+     * ordinary tap: with the erase or cross tool it has already changed a cell by the time the
+     * pinch is recognisable. Restoring this undoes that in one go — including the history entries
+     * it pushed, which is why the whole stack is kept and not just the design.
+     */
+    let beforeTouch: { design: Design; history: Design[] } | undefined;
     let panelOpen = false;
     let tab: Tab = "parts";
     /** Whether the ⓘ panel — this stage's own explanation — is down. */
@@ -364,6 +390,118 @@ export const Editor = island(
       if (el === null) return;
       el.scrollLeft = (el.scrollWidth - el.clientWidth) / 2;
       el.scrollTop = (el.scrollHeight - el.clientHeight) / 2;
+    }
+
+    // ---- the two-finger gesture ---------------------------------------------------------------
+
+    /** The fingers as a pinch, or undefined while there are not exactly two of them. */
+    function pinchOf(): Pinch | undefined {
+      const [a, b, third] = [...touches.values()];
+      if (b === undefined || third !== undefined) return undefined;
+      return {
+        distance: Math.hypot(a.x - b.x, a.y - b.y),
+        x: (a.x + b.x) / 2,
+        y: (a.y + b.y) / 2,
+      };
+    }
+
+    /**
+     * Books a frame to read the fingers on.
+     *
+     * The two fingers report separately — one `pointermove` each — so at the moment either one
+     * arrives, the pair is half a frame old: one finger has moved and the other has not. Measured
+     * then, the distance between them changes on every event, and a gesture that only travels
+     * reads as a rapid alternation of zooming in and out, each step dragging the board further
+     * from the fingers than the fingers went. Waiting for the frame reads both at once.
+     */
+    function bookPinch(): void {
+      if (pinchBooked) return;
+      pinchBooked = true;
+      requestAnimationFrame(() => {
+        pinchBooked = false;
+        const now = pinchOf();
+        if (pinch !== undefined && now !== undefined) pinchTo(now);
+      });
+    }
+
+    /**
+     * Zooms and pans the board to follow the fingers, one frame's worth.
+     *
+     * Both halves fall out of the same move: the board point under the old midpoint is put back
+     * under the new one, at the new zoom. Fingers that spread zoom in; fingers that keep their
+     * distance and travel together pan. A gesture that does some of each just works.
+     *
+     * The board's own rectangle is what the anchor is measured against, rather than the scroll
+     * offsets, because the viewport centres the board while it is smaller than the window — so the
+     * margin, and with it the meaning of `scrollLeft`, changes as the zoom does. Reading it back
+     * after the update settles the board inside this frame, so the next one measures from where
+     * the board actually is and the corrections cannot pile up.
+     */
+    function pinchTo(now: Pinch): void {
+      const from = pinch;
+      pinch = now;
+      const el = viewport();
+      if (from === undefined || el === null) return;
+      const board = el.querySelector<SVGSVGElement>("svg.board");
+      if (board === null) return;
+      const rect = board.getBoundingClientRect();
+      const fx = (from.x - rect.left) / rect.width;
+      const fy = (from.y - rect.top) / rect.height;
+      zoom = clamp(
+        (zoom ?? 32) * (now.distance / from.distance),
+        MIN_ZOOM,
+        MAX_ZOOM,
+      );
+      zoomedByHand = true;
+      handle.update();
+      // Re-queried rather than reused: an update is free to replace the node, and a detached one
+      // measures as nothing at all.
+      const moved = (el.querySelector<SVGSVGElement>("svg.board") ?? board)
+        .getBoundingClientRect();
+      pinchResidue = {
+        x: scrollAxis(el, "scrollLeft", moved.left + fx * moved.width - now.x),
+        y: scrollAxis(el, "scrollTop", moved.top + fy * moved.height - now.y),
+      };
+    }
+
+    /**
+     * Scrolls one axis by `by` plus whatever the last frame could not land, and returns the new
+     * remainder.
+     *
+     * `scrollLeft` and `scrollTop` round to whole pixels. A pan of four and a half pixels a frame
+     * is stored as five, so the board outruns the fingers by half a pixel every frame — a tenth of
+     * a swipe by the end of one. Carrying the rounded-off part keeps the board under the fingers.
+     *
+     * A clamp at the edge of the board leaves a remainder far larger than a rounding, and that one
+     * is dropped: carrying it would bank up scroll the board cannot take, and the fingers would
+     * travel back with nothing happening until the debt was paid off.
+     */
+    function scrollAxis(
+      el: HTMLElement,
+      axis: "scrollLeft" | "scrollTop",
+      by: number,
+    ): number {
+      const from = el[axis];
+      const want = from + by + pinchResidue[axis === "scrollLeft" ? "x" : "y"];
+      el[axis] = want;
+      return clamp(want - el[axis], -1, 1);
+    }
+
+    /** Hands the board back to the second finger: the first one's drag is abandoned and undone. */
+    function startPinch(now: Pinch): void {
+      drag = undefined;
+      hover = undefined;
+      message = undefined;
+      if (beforeTouch !== undefined && beforeTouch.design !== design) {
+        design = beforeTouch.design;
+        history = beforeTouch.history;
+        rebuild();
+        saveDraft();
+      }
+      beforeTouch = undefined;
+      pinch = now;
+      pinchResidue = { x: 0, y: 0 };
+      handle.update();
     }
 
     function openPanel(next: Tab): void {
@@ -766,9 +904,22 @@ export const Editor = island(
     function pointerDown(event: PointerEvent): void {
       if (stage === undefined || event.button !== 0) return;
       try {
+        // Captured before the gesture is read, so a finger that strays off the board keeps
+        // reporting: a pinch that widens past the edges is the normal way to zoom right in.
         (event.currentTarget as Element).setPointerCapture(event.pointerId);
       } catch {
         // Synthetic events carry no capturable pointer; nothing depends on the capture.
+      }
+      if (event.pointerType === "touch") {
+        touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        const now = pinchOf();
+        if (now !== undefined) {
+          startPinch(now);
+          return;
+        }
+        // A third finger belongs to no gesture; leave the pinch to the two already down.
+        if (pinch !== undefined) return;
+        beforeTouch = { design, history };
       }
       const p = cellOf(event);
       message = undefined;
@@ -840,6 +991,14 @@ export const Editor = island(
 
     function pointerMove(event: PointerEvent): void {
       if (stage === undefined) return;
+      if (event.pointerType === "touch") {
+        if (!touches.has(event.pointerId)) return;
+        touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (pinch !== undefined) {
+          bookPinch();
+          return;
+        }
+      }
       const p = cellOf(event);
       const changedCell = hover === undefined || hover.x !== p.x ||
         hover.y !== p.y;
@@ -901,7 +1060,17 @@ export const Editor = island(
       }
     }
 
-    function pointerUp(): void {
+    function pointerUp(event?: PointerEvent): void {
+      if (event !== undefined && event.pointerType === "touch") {
+        touches.delete(event.pointerId);
+        if (pinch !== undefined) {
+          // The gesture ends with the first finger to leave. The other one is not a fresh touch —
+          // it has no drag and starts none — so the board waits until the hand is off it.
+          if (touches.size < 2) pinch = undefined;
+          return;
+        }
+      }
+      if (touches.size === 0) beforeTouch = undefined;
       if (drag === undefined) return;
       const finished = drag;
       drag = undefined;
@@ -955,6 +1124,8 @@ export const Editor = island(
     }
 
     function pointerLeave(): void {
+      // A pinch that spreads past the edge of the board is still a pinch.
+      if (pinch !== undefined) return;
       hover = undefined;
       if (drag !== undefined) pointerUp();
       else handle.update();
@@ -1286,7 +1457,8 @@ export const Editor = island(
           mix={[
             on("pointerdown", (event) => pointerDown(event as PointerEvent)),
             on("pointermove", (event) => pointerMove(event as PointerEvent)),
-            on("pointerup", pointerUp),
+            on("pointerup", (event) => pointerUp(event as PointerEvent)),
+            on("pointercancel", (event) => pointerUp(event as PointerEvent)),
             on("pointerleave", pointerLeave),
             ...(playing_("pass") ? [boardCleared] : []),
             ...(playing_("step") ? [boardStepped] : []),
