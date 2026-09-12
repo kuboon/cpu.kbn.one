@@ -2541,9 +2541,10 @@ export const Editor = island(
                       class="message"
                       mix={[
                         animateEntrance(
+                          // Down from the top edge it is pinned to, not in from the left it left.
                           still() ? false : {
                             opacity: 0,
-                            transform: "translateX(-10px)",
+                            transform: "translateY(-10px)",
                             ...spring("bouncy"),
                           },
                         ),

@@ -6,6 +6,8 @@
   --accent: #2563eb;
   --border: #e5e7eb;
   --card: #f9fafb;
+  /* Refused, as text. Lighter in the dark palette, where #dc2626 reads at about 3:1. */
+  --danger: #dc2626;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -16,6 +18,7 @@
     --accent: #60a5fa;
     --border: #1f2937;
     --card: #111827;
+    --danger: #f87171;
   }
 }
 
@@ -453,6 +456,38 @@ body:has(.editor) .site-main {
 
 .zoom button:last-child {
   border-bottom: none;
+}
+
+/*
+ * A refusal — 「そこには置けません」 and its kind — floated over the board's top right corner.
+ *
+ * It had no rule of its own, which left it an ordinary flex item beside the viewport: a column a
+ * hundred and fifty pixels wide down the full height of the board, taking that width away for as
+ * long as the sentence was up. Positioning it takes it out of the flow, so nothing moves when it
+ * arrives or goes.
+ *
+ * The top right is the corner the board's own furniture leaves free — the zoom stack sits bottom
+ * right and the orientation bar bottom left — and it is the corner furthest from the finger that
+ * just did the thing being refused. It covers whatever is behind it, the ⓘ panel included: that
+ * panel is a reference to come back to, while a refusal is about the action just attempted.
+ *
+ * `pointer-events: none` because it is only ever read. A sentence that swallowed taps would make
+ * that corner of the board dead for as long as it was up.
+ */
+.stage > .message {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
+  max-width: min(18rem, calc(100% - 1.5rem));
+  margin: 0;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--danger);
+  border-radius: 0.75rem;
+  background: var(--bg);
+  color: var(--danger);
+  font-size: 0.9rem;
+  line-height: 1.4;
+  pointer-events: none;
 }
 
 .status {
