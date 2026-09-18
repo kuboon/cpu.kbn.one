@@ -300,8 +300,14 @@ export const Editor = island(
     let beforeTouch: { design: Design; history: Design[] } | undefined;
     let panelOpen = false;
     let tab: Tab = "parts";
-    /** Whether the ⓘ panel — this stage's own explanation — is down. */
-    let infoOpen = false;
+    /**
+     * Whether the ⓘ panel — this stage's own explanation — is down.
+     *
+     * Open when the stage opens: what the stage asks for is the first thing to know, and a player
+     * who arrives to a bare grid has to find the ⓘ before they can start. One tap puts it away,
+     * and it is not remembered — every stage asks for something different.
+     */
+    let infoOpen = true;
     /** The guided tour's overlay, mounted on the body the first time it is needed. */
     let tourEl: OnboardingTourElement | undefined;
     /** Which parts group has its explanation open: "primitives", or a stage id. */
@@ -2428,6 +2434,11 @@ export const Editor = island(
               () => {
                 infoOpen = !infoOpen;
                 handle.update();
+                // The panel takes its height off the board, so opening and closing it is a resize
+                // as far as the fit is concerned — and it is one the player did not ask for, so
+                // the board takes the room back on the way out. `onResize` leaves a hand-set zoom
+                // alone. A frame late, because the panel has to be laid out before it measures.
+                requestAnimationFrame(onResize);
               },
               <>
                 <circle cx="12" cy="12" r="9" />
