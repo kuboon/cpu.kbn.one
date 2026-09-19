@@ -8,6 +8,8 @@
   --card: #f9fafb;
   /* Refused, as text. Lighter in the dark palette, where #dc2626 reads at about 3:1. */
   --danger: #dc2626;
+  /* The play screen's top bar. Shared so anything floating under it knows where it ends. */
+  --bar-h: 3.25rem;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -245,7 +247,7 @@ body:has(.editor) .site-main {
   align-items: center;
   gap: 0.5rem;
   padding: 0 0.5rem;
-  height: 3.25rem;
+  height: var(--bar-h);
   border-bottom: 1px solid var(--border);
 }
 
@@ -363,6 +365,33 @@ body:has(.editor) .site-main {
   padding: 0.5rem 1rem 1rem;
   border-bottom: 1px solid var(--border);
   background: var(--card);
+}
+
+/*
+ * Too short for the explanation to have a row of its own: it floats over the board instead.
+ *
+ * A landscape phone leaves some 250px between the bar and the tools, and the explanation was
+ * taking half of it — the board came out a thumbnail. Floating costs the board nothing, and one
+ * tap on the ⓘ puts it away: the same bargain the refusal message makes. The z-index is the
+ * scrim's, and the panel comes first in the document, so the parts sheet still covers it.
+ */
+@media (max-height: 34rem) {
+  .info-panel {
+    position: absolute;
+    z-index: 1;
+    top: var(--bar-h);
+    left: 0;
+    /* Clear of the zoom stack, which a short screen pushes up into this band. */
+    right: 4rem;
+    max-height: calc(100% - var(--bar-h));
+    border-radius: 0 0 0.75rem 0.75rem;
+    box-shadow: 0 0.5rem 1.5rem rgb(31 41 55 / 18%);
+  }
+
+  /* The refusal keeps its corner: it has to read over the explanation, not under it. */
+  .stage > .message {
+    z-index: 2;
+  }
 }
 
 .info-panel p {
