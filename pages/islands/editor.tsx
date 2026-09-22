@@ -276,6 +276,15 @@ export const Editor = island(
       mirror: false,
     };
     let selected: number | undefined;
+    /**
+     * Which bus input has its lanes out, by pin name, or undefined for none.
+     *
+     * A tap on a bus pin used to add one to the whole word, which is fine for a counter and
+     * hopeless for reaching 200. The bar sets one lane at a time instead, so any value is eight
+     * taps at most — and the lanes are what the wires downstream actually carry, which is worth
+     * seeing on a screen about wiring them.
+     */
+    let editingInput: string | undefined;
     let hover: Point | undefined;
     /** Screen pixels per cell; undefined until the viewport has been measured. */
     let zoom: number | undefined;
@@ -979,6 +988,7 @@ export const Editor = island(
         case "select": {
           const index = edit.placementAt(design, library, p);
           selected = index;
+          if (index !== undefined) editingInput = undefined;
           if (index === undefined) {
             drag = { kind: "idle" };
           } else {
@@ -1110,12 +1120,17 @@ export const Editor = island(
           const pin = design.pins[finished.index];
           if (!finished.moved) {
             if (pin.dir === "in") {
-              const width = pinWidth(pin);
-              const current = inputs[pin.name] ?? 0;
-              const next = width === 1
-                ? (current ? 0 : 1)
-                : (current + 1) & MAX_BUS;
-              setInputs({ ...inputs, [pin.name]: next });
+              if (pinWidth(pin) === 1) {
+                setInputs({
+                  ...inputs,
+                  [pin.name]: inputs[pin.name] ? 0 : 1,
+                });
+              } else {
+                // A bus opens its lanes instead. Tapping the same pin again puts them away, and
+                // only one bar is ever up, so a part that was selected lets go of its own.
+                editingInput = editingInput === pin.name ? undefined : pin.name;
+                selected = undefined;
+              }
             }
           } else if (finished.to !== undefined) {
             commit(
@@ -1381,7 +1396,7 @@ export const Editor = island(
           key={`pin${index}`}
           class={`pin ${pin.dir}${bus ? " bus" : ""}${value ? " on" : ""}${
             short ? " short" : ""
-          }`}
+          }${editingInput === pin.name ? " editing" : ""}`}
         >
           <line
             x1={cx - dx * r}
@@ -2250,6 +2265,86 @@ export const Editor = island(
      * two controls that change it. The glyph is the real footprint with the first pin marked, so
      * a rotation is visible as a rotation rather than as the word "90°".
      */
+    /**
+     * One bus input's eight lanes, each its own switch, in the corner the orientation bar uses.
+     *
+     * Bit 7 sits on the left, the way the number is written, and carries its own index because on
+     * a bus stage which lane is the sign is the whole question. The field takes a value typed
+     * outright, and − and ＋ keep the one-at-a-time stepping a tap on the pin used to give.
+     */
+    function renderBitBar(): RemixNode {
+      if (editingInput === undefined) return null;
+      const name = editingInput;
+      const pin = design.pins.find((p) =>
+        p.dir === "in" && p.name === name && pinWidth(p) > 1
+      );
+      if (pin === undefined) return null;
+      const value = inputs[name] ?? 0;
+      const set = (next: number) =>
+        setInputs({ ...inputs, [name]: next & MAX_BUS });
+      return (
+        <div class="bits">
+          <span class="name">{name}</span>
+          <div class="lanes">
+            {Array.from({ length: BUS_WIDTH }, (_, i) => {
+              const lane = BUS_WIDTH - 1 - i;
+              const high = (value >> lane & 1) === 1;
+              return (
+                <button
+                  key={`lane${lane}`}
+                  type="button"
+                  class={`lane${high ? " on" : ""}`}
+                  title={`ビット ${lane}`}
+                  aria-pressed={high ? "true" : "false"}
+                  mix={[on("click", () => set(value ^ (1 << lane)))]}
+                >
+                  <small>{lane}</small>
+                  {high ? 1 : 0}
+                </button>
+              );
+            })}
+          </div>
+          <input
+            key={`bits-${name}-${value}`}
+            type="number"
+            min={0}
+            max={MAX_BUS}
+            aria-label={`${name} の値`}
+            defaultValue={String(value)}
+            mix={[on("change", (event) => {
+              const field = event.currentTarget as HTMLInputElement;
+              set(clamp(Math.floor(Number(field.value)) || 0, 0, MAX_BUS));
+            })]}
+          />
+          <button
+            type="button"
+            title="1 減らす"
+            mix={[on("click", () => set(value - 1))]}
+          >
+            −
+          </button>
+          <button
+            type="button"
+            title="1 増やす"
+            mix={[on("click", () => set(value + 1))]}
+          >
+            ＋
+          </button>
+          <button
+            type="button"
+            class="close"
+            title="閉じる"
+            mix={[on("click", () => {
+              editingInput = undefined;
+              handle.update();
+            })]}
+          >
+            ×
+          </button>
+        </div>
+      );
+    }
+
     function renderOrientBar(): RemixNode {
       const target = orientTarget();
       if (target === undefined) return null;
@@ -2545,6 +2640,7 @@ export const Editor = island(
                   </button>
                 </div>
                 {renderOrientBar()}
+                {renderBitBar()}
                 {message
                   ? (
                     <p

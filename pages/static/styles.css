@@ -1139,6 +1139,99 @@ body:has(.editor) .site-main {
 
 /* ---- the orientation bar --------------------------------------------------------------------- */
 
+/*
+ * A bus input's eight lanes, in the same corner as the orientation bar.
+ *
+ * Only one of the two is ever up — opening this clears the selection, selecting a part closes
+ * this — so they share the corner instead of stacking. It wraps onto a second line on a phone,
+ * where the eight switches alone take most of the width.
+ */
+.bits {
+  position: absolute;
+  left: 0.75rem;
+  bottom: 0.75rem;
+  /* As wide as its switches need and no wider, but never into the zoom stack's column. */
+  width: max-content;
+  max-width: calc(100% - 5rem);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  background: var(--bg);
+}
+
+.bits .name {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.bits .lanes {
+  display: flex;
+  gap: 0.2rem;
+}
+
+.bits .lane {
+  width: 1.9rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  gap: 0.1rem;
+  /* --border is a divider colour and vanishes against the card; a switch has to read as one. */
+  border: 1px solid color-mix(in srgb, var(--fg) 25%, transparent);
+  border-radius: 0.4rem;
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+
+/* The lane's own number: which bit this is, which on a bus stage is most of the question. */
+.bits .lane small {
+  font-size: 0.6rem;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.bits .lane.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.bits .lane.on small {
+  color: rgb(255 255 255 / 70%);
+}
+
+.bits input {
+  width: 4rem;
+  height: 2.5rem;
+}
+
+.bits button:not(.lane) {
+  width: 2.5rem;
+  height: 2.5rem;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 0.4rem;
+  background: var(--card);
+  color: var(--fg);
+  font: inherit;
+  font-size: 1.1rem;
+  cursor: pointer;
+}
+
+.bits button.close {
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+
 .orient {
   position: absolute;
   left: 0.75rem;
@@ -1405,6 +1498,16 @@ body:has(.editor) .site-main {
 
 .pin.short circle {
   stroke: var(--short);
+}
+
+/*
+ * The pin whose lanes are out, so the bar and the board agree on which one it is. Last of the
+ * three, because a pin can be on and being edited at once and this is the one that answers the
+ * question the player just asked.
+ */
+.pin.editing circle {
+  stroke: var(--accent);
+  stroke-width: 3;
 }
 
 .pin text {
