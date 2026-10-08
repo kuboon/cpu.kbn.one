@@ -128,7 +128,9 @@ export function harness(
     Object.entries(memory).map(([k, v]) => [Number(k), v]),
   );
   let state: CpuState = { a: 0, d: 0, pc: 0 };
+  // Each program starts from power-on, whatever an earlier program left in the registers.
   const steps: Step[] = [{
+    reset: true,
     set: { clk: 0, i: 0, m: 0 },
     expect: { pc: 0, addr: 0 },
   }];
