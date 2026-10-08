@@ -726,6 +726,10 @@ export const Editor = island(
       sim.reset();
       inputs = {};
       for (let i = 0; i <= index; i++) {
+        if (stage.steps[i].reset) {
+          sim.reset();
+          inputs = {};
+        }
         inputs = { ...inputs, ...stage.steps[i].set };
         live = sim.evaluate(stage.steps[i].set);
       }

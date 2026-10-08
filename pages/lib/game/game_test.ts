@@ -294,6 +294,8 @@ Deno.test("an SR latch holds its state across steps", () => {
     { set: { reset: 1 }, expect: { q: 0 } },
     { set: { reset: 0 }, expect: { q: 0 } },
     { set: { set: 1 }, expect: { q: 1 } },
+    // A step marked reset power-cycles the circuit: the latch and the inputs start over.
+    { reset: true, set: {}, expect: { q: 0 } },
   ]);
   assert(
     results.every((r) => r.ok),
@@ -510,6 +512,12 @@ Deno.test("the reference CPU runs the test programs", () => {
   assertEquals(writes.length, 1);
   assertEquals(writes[0].expect.data, 7);
   assertEquals(steps.at(-1)?.expect.pc, 6);
+
+  // Every program in the CPU stage starts from power-on, not where the previous one stopped.
+  const cpu = STAGES.find((s) => s.id === "cpu8")!;
+  const starts = cpu.steps.filter((s) => s.reset);
+  assertEquals(starts.length, 3);
+  for (const s of starts) assertEquals(s.expect, { pc: 0, addr: 0 });
 });
 
 Deno.test("achievements: the manifest is valid and registrations earn the right keys", () => {

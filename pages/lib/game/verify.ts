@@ -20,6 +20,8 @@ export interface Step {
   set: Record<string, number>;
   expect: Record<string, number>;
   label?: string;
+  /** Power-cycle the circuit before this step, so it starts from the same state as a fresh run. */
+  reset?: boolean;
 }
 
 export interface StepResult {
@@ -44,6 +46,7 @@ export function runSteps(
 ): StepResult[] {
   const sim = new Simulator(netlist);
   return steps.map((step) => {
+    if (step.reset) sim.reset();
     const { outputs, error } = sim.evaluate(step.set);
     const ok = error === undefined &&
       Object.entries(step.expect).every(([name, bit]) => outputs[name] === bit);

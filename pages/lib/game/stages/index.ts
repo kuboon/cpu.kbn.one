@@ -364,7 +364,7 @@ export const STAGES: readonly Stage[] = [
       [{ clk: 1 }, { q: 255 }],
     ),
     maxSize: { width: 48, height: 48 },
-    initialSize: { width: 24, height: 16 },
+    initialSize: { width: 36, height: 24 },
   },
   {
     id: "counter8",
@@ -390,7 +390,7 @@ export const STAGES: readonly Stage[] = [
       [{ clk: 1 }, { out: 0 }],
     ),
     maxSize: { width: 64, height: 64 },
-    initialSize: { width: 32, height: 20 },
+    initialSize: { width: 48, height: 32 },
   },
   {
     id: "logic8",
@@ -417,7 +417,7 @@ export const STAGES: readonly Stage[] = [
       ],
     ),
     maxSize: { width: 64, height: 64 },
-    initialSize: { width: 32, height: 20 },
+    initialSize: { width: 48, height: 32 },
   },
   {
     id: "arith8",
@@ -445,7 +445,7 @@ export const STAGES: readonly Stage[] = [
       ],
     ),
     maxSize: { width: 64, height: 64 },
-    initialSize: { width: 32, height: 20 },
+    initialSize: { width: 48, height: 32 },
   },
   {
     id: "alu8",
@@ -481,7 +481,7 @@ export const STAGES: readonly Stage[] = [
       ],
     ),
     maxSize: { width: 64, height: 64 },
-    initialSize: { width: 40, height: 24 },
+    initialSize: { width: 56, height: 40 },
   },
   {
     id: "cond8",
@@ -506,7 +506,7 @@ export const STAGES: readonly Stage[] = [
       { x: 255, lt: 1, eq: 1, gt: 1 },
     ]),
     maxSize: { width: 32, height: 32 },
-    initialSize: { width: 16, height: 12 },
+    initialSize: { width: 24, height: 18 },
   },
   {
     id: "ram4",
@@ -540,7 +540,7 @@ export const STAGES: readonly Stage[] = [
       [{ clk: 0, a1: 0, a0: 0 }, { out: 11 }],
     ),
     maxSize: { width: 96, height: 96 },
-    initialSize: { width: 40, height: 28 },
+    initialSize: { width: 64, height: 44 },
   },
   {
     id: "control8",
@@ -564,7 +564,7 @@ export const STAGES: readonly Stage[] = [
       { i: 0b11111111 },
     ]),
     maxSize: { width: 32, height: 32 },
-    initialSize: { width: 16, height: 12 },
+    initialSize: { width: 24, height: 18 },
   },
   {
     id: "cpu8",
@@ -579,7 +579,7 @@ export const STAGES: readonly Stage[] = [
       ...harness(PROGRAM_MEMORY, { 3: 42 }),
     ],
     maxSize: { width: 128, height: 128 },
-    initialSize: { width: 64, height: 40 },
+    initialSize: { width: 96, height: 64 },
   },
 ];
 
