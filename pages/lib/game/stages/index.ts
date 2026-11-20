@@ -220,7 +220,13 @@ export const STAGES: readonly Stage[] = [
       [{ clk: 1 }, { q: 0 }],
     ),
     maxSize: { width: 32, height: 24 },
-    initialSize: { width: 12, height: 8 },
+    /*
+     * A selector and a flip-flop do not fit in 12×8, which this used to start at: the flip-flop
+     * alone is ten by six, and the loop back from q needs a row above it and the clock a row
+     * below. Starting at the reference's size plus a little saves growing the board a cell at a
+     * time before anything can be placed at all.
+     */
+    initialSize: { width: 16, height: 12 },
   },
   {
     id: "neg8",
@@ -363,8 +369,18 @@ export const STAGES: readonly Stage[] = [
       [{ clk: 0, d: 255 }, { q: 85 }],
       [{ clk: 1 }, { q: 255 }],
     ),
-    maxSize: { width: 48, height: 48 },
-    initialSize: { width: 36, height: 24 },
+    /*
+     * Room for eight 1-bit registers and the corridor between them.
+     *
+     * This was 48×48, which the reference solution fills exactly: eight copies of a 14×11 register
+     * is already 28 columns of parts, and four of them stacked is the full height, so a register
+     * any larger has nowhere to put the two bus splits. A 1-bit register is allowed 32×24 of its
+     * own, and the stage after this one, which holds a whole register8 and an incrementer, is
+     * allowed 64×64; 48 here was the odd one out.
+     */
+    maxSize: { width: 64, height: 64 },
+    /* 36×24 cannot hold eight 1-bit registers; the reference needs every cell of 48×48. */
+    initialSize: { width: 48, height: 48 },
   },
   {
     id: "counter8",
