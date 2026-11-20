@@ -9,6 +9,7 @@
 import type { ComponentDef, Design } from "./model.ts";
 import { area } from "./model.ts";
 import { design } from "./builder.ts";
+import { REGISTER8 } from "./reference-register8.ts";
 
 /** NOT: a source feeding a default-on relay. */
 export const NOT: Design = design(2, 1)
@@ -168,6 +169,74 @@ export const NEG8: Design = design(2, 8)
   .place("split", 0, 0).wire(1, 7, "we")
   .build();
 
+/** The flip-flop and the selector as parts, for the register the next stage needs. */
+export const DFF_COMPONENT: ComponentDef = component(
+  "dff",
+  "D flip-flop 10×6",
+  "dff",
+  DFF,
+);
+export const SELECTOR_COMPONENT: ComponentDef = component(
+  "sel",
+  "Selector 4×3",
+  "selector",
+  SELECTOR,
+);
+
+/**
+ * 1-bit register: a selector in front of the flip-flop, which is what the stage's own hint says.
+ *
+ * The shape is forced by what the next stage does with it. Eight of these go on one board there,
+ * in two columns facing a single corridor, so every pin is on one edge — the left column is simply
+ * turned round — and every column of this board costs two of the forty-eight there.
+ *
+ * The selector picks d while st is 1 and the flip-flop's own q while it is 0, so a 0 holds. The
+ * obvious cheaper circuit, a D latch gated by st AND NOT clk, does not work: a latch holds through
+ * a loop that needs its own output to stay up, and this stage's eighth step drops st and d in the
+ * same breath, which settles the loop to 0. Going through the selector keeps the value driven.
+ */
+export const REGISTER_BIT: Design = design(14, 11)
+  .input("clk", "w", 2).input("st", "w", 9).input("d", "w", 4).output(
+    "q",
+    "w",
+    1,
+  )
+  .place("dff", 7, 1, 3)
+  .place("sel", 1, 6, 3)
+  .wire(6, 0, "es").wire(7, 0, "ew").wire(8, 0, "ew").wire(9, 0, "ew").wire(
+    10,
+    0,
+    "ew",
+  )
+  .wire(11, 0, "ew").wire(12, 0, "ew").wire(13, 0, "sw")
+  .wire(0, 1, "ew").wire(1, 1, "ew").wire(2, 1, "ew").wire(3, 1, "ew").wire(
+    4,
+    1,
+    "ew",
+  )
+  .wire(5, 1, "sw").wire(6, 1, "ns").wire(13, 1, "ns")
+  .wire(0, 2, "ew").wire(1, 2, "ew").wire(2, 2, "ew").wire(3, 2, "ew").wire(
+    4,
+    2,
+    "ew",
+  )
+  .cross(5, 2).wire(6, 2, "nw").wire(13, 2, "ns")
+  .wire(5, 3, "ns").wire(13, 3, "ns")
+  .wire(0, 4, "ew").wire(1, 4, "ew").wire(2, 4, "ew").wire(3, 4, "ew").wire(
+    4,
+    4,
+    "sw",
+  )
+  .wire(5, 4, "ns").wire(13, 4, "ns")
+  .wire(2, 5, "es").wire(3, 5, "ew").cross(4, 5).cross(5, 5).wire(6, 5, "ew")
+  .wire(13, 5, "ns")
+  .wire(4, 6, "nw").wire(5, 6, "nes").wire(6, 6, "ew").wire(13, 6, "ns")
+  .wire(4, 7, "es").wire(5, 7, "nw").wire(13, 7, "ns")
+  .wire(0, 8, "es").wire(4, 8, "ns").wire(13, 8, "ns")
+  .wire(0, 9, "nw").wire(4, 9, "ns").wire(13, 9, "nw")
+  .wire(2, 10, "ne").wire(3, 10, "ew").wire(4, 10, "nw")
+  .build();
+
 export const REFERENCES: Readonly<Record<string, Design>> = {
   not: NOT,
   nand: NAND,
@@ -180,14 +249,27 @@ export const REFERENCES: Readonly<Record<string, Design>> = {
   "d-latch": D_LATCH,
   dff: DFF,
   neg8: NEG8,
+  "register-bit": REGISTER_BIT,
+  register8: REGISTER8,
 };
 
 /** Components the composite references need. */
+/** The 1-bit register as a part: Register (8-bit) places eight of them. */
+export const REGISTER_BIT_COMPONENT: ComponentDef = component(
+  "reg",
+  "1-bit register 14×11",
+  "register-bit",
+  REGISTER_BIT,
+);
+
 export const REFERENCE_COMPONENTS: readonly ComponentDef[] = [
   XOR_COMPONENT,
   AND_COMPONENT,
   NOT_COMPONENT,
   D_LATCH_COMPONENT,
+  DFF_COMPONENT,
+  SELECTOR_COMPONENT,
+  REGISTER_BIT_COMPONENT,
 ];
 
 /** The area to beat, where a reference exists. */

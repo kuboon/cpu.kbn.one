@@ -48,12 +48,17 @@ function describe(result: ReturnType<typeof verify>): string {
   return [...result.problems.map((p) => p.message), ...failed].join("\n");
 }
 
-Deno.test("every reference solution passes its stage", () => {
+Deno.test("every reference solution passes its stage, on a board the stage allows", () => {
   for (const [id, d] of Object.entries(REFERENCES)) {
     const stage = findStage(id);
     assert(stage, `stage ${id} exists`);
     const result = verify(d, library, stage);
     assert(result.passed, `${id}:\n${describe(result)}`);
+    // A reference that would not fit the stage's own board is not a solution anyone could build.
+    assert(
+      d.width <= stage.maxSize.width && d.height <= stage.maxSize.height,
+      `${id}: ${d.width}×${d.height} is over the stage's ${stage.maxSize.width}×${stage.maxSize.height}`,
+    );
   }
 });
 
@@ -73,14 +78,14 @@ Deno.test("reference areas are the pars", () => {
       "sr-latch": 12,
       "d-latch": 12,
       dff: 60,
-      "register-bit": undefined,
+      "register-bit": 154,
       neg8: 16,
       zero8: undefined,
       selector8: undefined,
       add8: undefined,
       inc8: undefined,
       sub8: undefined,
-      register8: undefined,
+      register8: 2304,
       counter8: undefined,
       logic8: undefined,
       arith8: undefined,
